@@ -1,0 +1,164 @@
+[
+  {
+    "rule_id": "R01",
+    "formula": {
+      "kind": "compare",
+      "op": "=",
+      "left": {
+        "kind": "symbol",
+        "name": "Inventory_End"
+      },
+      "right": {
+        "kind": "binary",
+        "op": "-",
+        "left": {
+          "kind": "binary",
+          "op": "+",
+          "left": {
+            "kind": "symbol",
+            "name": "Inventory_Begin"
+          },
+          "right": {
+            "kind": "symbol",
+            "name": "Purchases"
+          }
+        },
+        "right": {
+          "kind": "symbol",
+          "name": "COGS"
+        }
+      }
+    },
+    "display": "Inventory_End = ((Inventory_Begin + Purchases) - COGS)",
+    "support": 1.0,
+    "source": {
+      "importer": "manual-finance-rules",
+      "original_file": "forge/scenarios/finance_v1/manual_rules.json",
+      "original_line": 1,
+      "original_expression": "Equality(Symbol('Inventory_End'), Add(Symbol('Inventory_Begin'), Symbol('Purchases'), Mul(Integer(-1), Symbol('COGS'))))",
+      "field_mode": "generic",
+      "label_mode": "none",
+      "note_zh": "进销存勾稽：期末存货 = 期初存货 + 本期采购 - 营业成本"
+    }
+  },
+  {
+    "rule_id": "R02",
+    "formula": {
+      "kind": "compare",
+      "op": "=",
+      "left": {
+        "kind": "symbol",
+        "name": "TotalAssets"
+      },
+      "right": {
+        "kind": "binary",
+        "op": "+",
+        "left": {
+          "kind": "symbol",
+          "name": "TotalLiabilities"
+        },
+        "right": {
+          "kind": "symbol",
+          "name": "TotalEquity"
+        }
+      }
+    },
+    "display": "TotalAssets = (TotalLiabilities + TotalEquity)",
+    "support": 1.0,
+    "source": {
+      "importer": "manual-finance-rules",
+      "original_file": "forge/scenarios/finance_v1/manual_rules.json",
+      "original_line": 2,
+      "original_expression": "Equality(Symbol('TotalAssets'), Add(Symbol('TotalLiabilities'), Symbol('TotalEquity')))",
+      "field_mode": "generic",
+      "label_mode": "none",
+      "note_zh": "资产负债配平：资产总计 = 负债总计 + 所有者权益"
+    }
+  },
+  {
+    "rule_id": "R03",
+    "formula": {
+      "kind": "compare",
+      "op": "=",
+      "left": {
+        "kind": "symbol",
+        "name": "Inventory_Begin_ctx1"
+      },
+      "right": {
+        "kind": "symbol",
+        "name": "Inventory_End_ctx0"
+      }
+    },
+    "display": "Inventory_Begin_ctx1 = Inventory_End_ctx0",
+    "support": 1.0,
+    "source": {
+      "importer": "manual-finance-rules",
+      "original_file": "forge/scenarios/finance_v1/manual_rules.json",
+      "original_line": 3,
+      "original_expression": "Equality(Symbol('InventoryBegin_1'), Symbol('InventoryEnd_0'))",
+      "field_mode": "generic",
+      "label_mode": "none",
+      "note_zh": "存货跨期滚动：下期期初存货 = 本期期末存货（ctx0=本期 / ctx1=下期，按 CompanyId 分区、PeriodIndex 排序的滑动窗口；窗口语义待宿主机 netn 实测确认）"
+    }
+  },
+  {
+    "rule_id": "R04",
+    "formula": {
+      "kind": "compare",
+      "op": "=",
+      "left": {
+        "kind": "symbol",
+        "name": "Cash_Begin_ctx1"
+      },
+      "right": {
+        "kind": "symbol",
+        "name": "Cash_End_ctx0"
+      }
+    },
+    "display": "Cash_Begin_ctx1 = Cash_End_ctx0",
+    "support": 1.0,
+    "source": {
+      "importer": "manual-finance-rules",
+      "original_file": "forge/scenarios/finance_v1/manual_rules.json",
+      "original_line": 4,
+      "original_expression": "Equality(Symbol('CashBegin_1'), Symbol('CashEnd_0'))",
+      "field_mode": "generic",
+      "label_mode": "none",
+      "note_zh": "现金跨期滚动：下期期初现金 = 本期期末现金（窗口语义同 R03）"
+    }
+  },
+  {
+    "rule_id": "R05",
+    "formula": {
+      "kind": "compare",
+      "op": "=",
+      "left": {
+        "kind": "symbol",
+        "name": "GrossProfit"
+      },
+      "right": {
+        "kind": "binary",
+        "op": "-",
+        "left": {
+          "kind": "symbol",
+          "name": "Revenue"
+        },
+        "right": {
+          "kind": "symbol",
+          "name": "COGS"
+        }
+      }
+    },
+    "display": "GrossProfit = (Revenue - COGS)",
+    "support": 1.0,
+    "source": {
+      "importer": "manual-finance-rules",
+      "original_file": "forge/scenarios/finance_v1/manual_rules.json",
+      "original_line": 5,
+      "original_expression": "Equality(Symbol('GrossProfit'), Add(Symbol('Revenue'), Mul(Integer(-1), Symbol('COGS'))))",
+      "field_mode": "generic",
+      "label_mode": "none",
+      "note_zh": "毛利恒等式：毛利润 = 营业收入 - 营业成本"
+    }
+  }
+]

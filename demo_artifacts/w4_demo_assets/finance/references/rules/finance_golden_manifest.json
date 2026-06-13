@@ -1,0 +1,27 @@
+{
+  "auto_excluded_fields": {},
+  "configured_exclude_fields": [],
+  "dataset": "finance_v1",
+  "excluded_fields": [],
+  "fit_metadata": {
+    "evidence_cache_hit": false,
+    "evidence_cache_path": "E:\\yanchh\\model_control\\netnomos-forge\\forge\\rulesets\\finance_v1\\runs\\.cache\\evidence\\finance_v1_260613-105517.pkl",
+    "evidence_set_count": 960,
+    "hitting_set_backend_requested": "python",
+    "hitting_set_backend_used": "python",
+    "hitting_set_native_available": false,
+    "rule_count_after_prune": 4901,
+    "rule_count_before_prune": 5000,
+    "search_elapsed_seconds": 9.561999999999898,
+    "search_stopped_early": false,
+    "stall_elapsed_seconds": 0.0,
+    "stall_timeout_seconds": null,
+    "stop_reason": "max-rules"
+  },
+  "grammar": "finance_v1",
+  "learner": "hitting-set",
+  "predicate_count": 302,
+  "row_count": 960,
+  "rule_count": 4901,
+  "source_type": "csv"
+}

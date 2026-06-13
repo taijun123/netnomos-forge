@@ -1,0 +1,21 @@
+{
+  "meta": {
+    "scenario": "network_cidds",
+    "track": "B",
+    "source_zh": "人工构造的合规预置样本：依据 golden_cidds 规则（42×Packets ≤ Bytes ≤ 65535×Packets、Proto=UDP→Flags=noflags、端口53→DNS 身份）手工填写并经 forge.core.reporter.check_netflow_rows 校验零违规。仅供沙箱/无 LeJIT 环境演示降级使用；宿主机执行 scripts/host/train_network_lejit.ps1 + generate_network.ps1 后，应以 LeJIT bundle 实际生成的 10 条记录替换本文件 rows。",
+    "generator": "manual-fallback（待 LeJIT 实跑替换）",
+    "created": "2026-06-13"
+  },
+  "rows": [
+    {"DateFirstSeen": "2017-03-23 09:01:12.103", "Duration": 0.0, "Proto": "TCP", "SrcIpAddr": "192.168.220.7", "SrcPt": 37320, "DstIpAddr": "10081_164", "DstPt": 80, "Packets": 1, "Bytes": 66, "Flows": 1, "Flags": ".A....", "Tos": 0},
+    {"DateFirstSeen": "2017-03-23 09:02:45.870", "Duration": 0.002, "Proto": "UDP", "SrcIpAddr": "192.168.220.8", "SrcPt": 34358, "DstIpAddr": "DNS", "DstPt": 53, "Packets": 2, "Bytes": 164, "Flows": 1, "Flags": "......", "Tos": 0},
+    {"DateFirstSeen": "2017-03-23 09:03:02.444", "Duration": 0.31, "Proto": "TCP", "SrcIpAddr": "192.168.220.16", "SrcPt": 37922, "DstIpAddr": "10082_43", "DstPt": 443, "Packets": 6, "Bytes": 1320, "Flows": 1, "Flags": ".AP.SF", "Tos": 0},
+    {"DateFirstSeen": "2017-03-23 09:04:18.009", "Duration": 0.0, "Proto": "TCP", "SrcIpAddr": "192.168.220.4", "SrcPt": 57656, "DstIpAddr": "10056_105", "DstPt": 443, "Packets": 1, "Bytes": 66, "Flows": 1, "Flags": ".A....", "Tos": 0},
+    {"DateFirstSeen": "2017-03-23 09:05:33.512", "Duration": 0.004, "Proto": "UDP", "SrcIpAddr": "192.168.220.12", "SrcPt": 51413, "DstIpAddr": "DNS", "DstPt": 53, "Packets": 2, "Bytes": 196, "Flows": 1, "Flags": "......", "Tos": 0},
+    {"DateFirstSeen": "2017-03-23 09:06:01.220", "Duration": 1.84, "Proto": "TCP", "SrcIpAddr": "192.168.220.5", "SrcPt": 49152, "DstIpAddr": "192.168.100.3", "DstPt": 8000, "Packets": 12, "Bytes": 6480, "Flows": 1, "Flags": ".AP.SF", "Tos": 0},
+    {"DateFirstSeen": "2017-03-23 09:07:54.781", "Duration": 0.0, "Proto": "UDP", "SrcIpAddr": "192.168.220.9", "SrcPt": 137, "DstIpAddr": "192.168.220.255", "DstPt": 137, "Packets": 1, "Bytes": 92, "Flows": 1, "Flags": "......", "Tos": 0},
+    {"DateFirstSeen": "2017-03-23 09:08:27.336", "Duration": 0.46, "Proto": "TCP", "SrcIpAddr": "192.168.210.5", "SrcPt": 445, "DstIpAddr": "192.168.220.15", "DstPt": 52174, "Packets": 9, "Bytes": 4122, "Flows": 1, "Flags": ".AP.SF", "Tos": 0},
+    {"DateFirstSeen": "2017-03-23 09:09:40.064", "Duration": 0.003, "Proto": "UDP", "SrcIpAddr": "192.168.220.14", "SrcPt": 41608, "DstIpAddr": "DNS", "DstPt": 53, "Packets": 2, "Bytes": 178, "Flows": 1, "Flags": "......", "Tos": 0},
+    {"DateFirstSeen": "2017-03-23 09:10:11.905", "Duration": 0.27, "Proto": "TCP", "SrcIpAddr": "192.168.220.6", "SrcPt": 38844, "DstIpAddr": "10081_164", "DstPt": 80, "Packets": 7, "Bytes": 2940, "Flows": 1, "Flags": ".AP.SF", "Tos": 0}
+  ]
+}

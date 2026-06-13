@@ -1,0 +1,58 @@
+{
+  "name": "finance_v1",
+  "description": "合成财务报表数据：3 行业 x 40 公司 x 8 期 = 960 行，金额单位千元；source_name 为中文表头（save_csv(use_source_names=True) 导出口径）",
+  "source": {
+    "type": "csv",
+    "path": "data/finance_v1_train.csv"
+  },
+  "fields": [
+    {"name": "CompanyId", "source_name": "公司编号", "value_type": "categorical", "roles": ["src", "identifier"]},
+    {"name": "Industry", "source_name": "行业", "value_type": "categorical", "roles": ["identifier"]},
+    {"name": "PeriodIndex", "source_name": "期数", "value_type": "integer", "roles": ["time"]},
+    {"name": "Revenue", "source_name": "营业收入", "value_type": "integer", "roles": ["size", "measurement"]},
+    {"name": "COGS", "source_name": "营业成本", "value_type": "integer", "roles": ["size", "measurement"]},
+    {"name": "GrossProfit", "source_name": "毛利润", "value_type": "integer", "roles": ["size", "measurement"]},
+    {"name": "NetProfit", "source_name": "净利润", "value_type": "integer", "roles": ["size", "measurement"]},
+    {"name": "Purchases", "source_name": "本期采购额", "value_type": "integer", "roles": ["size", "measurement"]},
+    {"name": "Cash_Begin", "source_name": "期初现金", "value_type": "integer", "roles": ["size", "measurement"]},
+    {"name": "Cash_End", "source_name": "期末现金", "value_type": "integer", "roles": ["size", "measurement"]},
+    {"name": "Inventory_Begin", "source_name": "期初存货", "value_type": "integer", "roles": ["size", "measurement"]},
+    {"name": "Inventory_End", "source_name": "期末存货", "value_type": "integer", "roles": ["size", "measurement"]},
+    {"name": "AccountsReceivable", "source_name": "应收账款", "value_type": "integer", "roles": ["size", "measurement"]},
+    {"name": "OtherAssets", "source_name": "其他资产", "value_type": "integer", "roles": ["size", "measurement"]},
+    {"name": "TotalAssets", "source_name": "资产总计", "value_type": "integer", "roles": ["size", "measurement"]},
+    {"name": "TotalLiabilities", "source_name": "负债总计", "value_type": "integer", "roles": ["size", "measurement"]},
+    {"name": "TotalEquity", "source_name": "所有者权益", "value_type": "integer", "roles": ["size", "measurement"]},
+    {
+      "name": "InventoryNetInflow",
+      "source_name": "存货净流入",
+      "value_type": "integer",
+      "roles": ["size", "measurement"],
+      "constants": [
+        {"kind": "limit", "values": [0], "description": "存货净流入零界点（采购=耗用）"}
+      ]
+    },
+    {
+      "name": "InventoryToAssetsBp",
+      "source_name": "存货资产占比万分比",
+      "value_type": "integer",
+      "roles": ["measurement"],
+      "constants": [
+        {"kind": "limit", "values": [0, 200, 800, 1500, 2000, 3000], "description": "行业存货占比区间端点（bp）：consulting<=200，manufacturing 800-2000，retail 1500-3000"}
+      ]
+    },
+    {
+      "name": "ReceivableToRevenueBp",
+      "source_name": "应收营收占比万分比",
+      "value_type": "integer",
+      "roles": ["measurement"],
+      "constants": [
+        {"kind": "limit", "values": [200, 1000, 1500, 2500, 3500], "description": "行业应收/营收区间端点（bp）：retail 200-1000，manufacturing 1000-2500，consulting 1500-3500"}
+      ]
+    }
+  ],
+  "grouping_keys": ["CompanyId"],
+  "ordering_keys": ["PeriodIndex"],
+  "preprocessing": [],
+  "derived_variables": []
+}

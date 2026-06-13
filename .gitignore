@@ -1,0 +1,52 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Node / frontend
+node_modules/
+web/node_modules/
+dist/
+web/dist/
+web/.vite/
+web/tsconfig.tsbuildinfo
+*.fuse_hidden*
+
+# Runtime logs and local process output
+*.log
+*.err
+*.err.log
+frontend-runtime.log
+server-runtime.log
+server-runtime.err.log
+web/*-runtime.log
+web/*-runtime.err.log
+
+# Generated runs, uploads, and temporary validation files
+runs/
+**/runs/
+demo_artifacts/uploads/
+docs/.lo_profile*/
+docs/_manual_render/
+docs/_render*/
+docs/minimal_render_test.docx
+docs/*_render_test.*
+
+# Large local training artifacts and model checkpoints
+**/*.safetensors
+**/lejit_bundle/model/
+**/lejit_bundle/trainer/
+**/optimizer.pt
+**/scheduler.pt
+**/rng_state.pth
+**/training_args.bin
+forge/rulesets/*/20*/
+forge/rulesets/*/generated*.csv
+forge/rulesets/*/sample_b.json
+
+# Raw local data drops
+data/*.csv
+data/*.pcap

@@ -1,0 +1,691 @@
+{
+  "context_window": null,
+  "derived_variables": [],
+  "description": "CIDDS week-2 normal NetFlow 10k\uff08netnomos-forge \u7f51\u7edc\u573a\u666f\uff0c\u5b57\u6bb5/\u9884\u5904\u7406\u6cbf\u7528 NetNomos examples/datasets/cidds.json\uff09",
+  "entity_keys": [],
+  "exclude_fields": [
+    "Flows"
+  ],
+  "fields": [
+    {
+      "bounds": null,
+      "constants": [],
+      "context_family": null,
+      "context_index": null,
+      "domain": null,
+      "enum_labels": {},
+      "name": "DateFirstSeen",
+      "roles": [
+        "time"
+      ],
+      "source_name": "Date first seen",
+      "value_type": "string"
+    },
+    {
+      "bounds": null,
+      "constants": [],
+      "context_family": null,
+      "context_index": null,
+      "domain": null,
+      "enum_labels": {},
+      "name": "Duration",
+      "roles": [
+        "time",
+        "measurement"
+      ],
+      "source_name": null,
+      "value_type": "real"
+    },
+    {
+      "bounds": null,
+      "constants": [],
+      "context_family": null,
+      "context_index": null,
+      "domain": null,
+      "enum_labels": {},
+      "name": "Proto",
+      "roles": [
+        "proto"
+      ],
+      "source_name": null,
+      "value_type": "categorical"
+    },
+    {
+      "bounds": null,
+      "constants": [],
+      "context_family": null,
+      "context_index": null,
+      "domain": null,
+      "enum_labels": {},
+      "name": "SrcIpAddr",
+      "roles": [
+        "src",
+        "identifier"
+      ],
+      "source_name": "Src IP Addr",
+      "value_type": "categorical"
+    },
+    {
+      "bounds": null,
+      "constants": [],
+      "context_family": null,
+      "context_index": null,
+      "domain": null,
+      "enum_labels": {},
+      "name": "SrcPt",
+      "roles": [
+        "src",
+        "identifier"
+      ],
+      "source_name": "Src Pt",
+      "value_type": "integer"
+    },
+    {
+      "bounds": null,
+      "constants": [],
+      "context_family": null,
+      "context_index": null,
+      "domain": null,
+      "enum_labels": {},
+      "name": "DstIpAddr",
+      "roles": [
+        "dst",
+        "identifier"
+      ],
+      "source_name": "Dst IP Addr",
+      "value_type": "categorical"
+    },
+    {
+      "bounds": null,
+      "constants": [],
+      "context_family": null,
+      "context_index": null,
+      "domain": null,
+      "enum_labels": {},
+      "name": "DstPt",
+      "roles": [
+        "dst",
+        "identifier"
+      ],
+      "source_name": "Dst Pt",
+      "value_type": "integer"
+    },
+    {
+      "bounds": null,
+      "constants": [
+        {
+          "description": "CIDDS subnet classes",
+          "kind": "assignment",
+          "values": [
+            0,
+            100,
+            200,
+            210,
+            220,
+            666,
+            888
+          ]
+        }
+      ],
+      "context_family": null,
+      "context_index": null,
+      "domain": null,
+      "enum_labels": {
+        "0": "unspecified",
+        "100": "servers",
+        "200": "management",
+        "210": "office",
+        "220": "developer",
+        "666": "public",
+        "888": "dns"
+      },
+      "name": "SrcSubnet",
+      "roles": [
+        "src",
+        "identifier"
+      ],
+      "source_name": null,
+      "value_type": "integer"
+    },
+    {
+      "bounds": null,
+      "constants": [
+        {
+          "description": "CIDDS subnet classes",
+          "kind": "assignment",
+          "values": [
+            0,
+            100,
+            200,
+            210,
+            220,
+            666,
+            888
+          ]
+        }
+      ],
+      "context_family": null,
+      "context_index": null,
+      "domain": null,
+      "enum_labels": {
+        "0": "unspecified",
+        "100": "servers",
+        "200": "management",
+        "210": "office",
+        "220": "developer",
+        "666": "public",
+        "888": "dns"
+      },
+      "name": "DstSubnet",
+      "roles": [
+        "dst",
+        "identifier"
+      ],
+      "source_name": null,
+      "value_type": "integer"
+    },
+    {
+      "bounds": null,
+      "constants": [
+        {
+          "description": "CIDDS port categories",
+          "kind": "assignment",
+          "values": [
+            53,
+            80,
+            443,
+            70000,
+            71000,
+            72000
+          ]
+        }
+      ],
+      "context_family": null,
+      "context_index": null,
+      "domain": null,
+      "enum_labels": {
+        "443": "https",
+        "53": "dns",
+        "70000": "well_known",
+        "71000": "registered",
+        "72000": "dynamic",
+        "80": "http"
+      },
+      "name": "SrcPortClass",
+      "roles": [
+        "src",
+        "identifier"
+      ],
+      "source_name": null,
+      "value_type": "integer"
+    },
+    {
+      "bounds": null,
+      "constants": [
+        {
+          "description": "CIDDS port categories",
+          "kind": "assignment",
+          "values": [
+            53,
+            80,
+            443,
+            70000,
+            71000,
+            72000
+          ]
+        }
+      ],
+      "context_family": null,
+      "context_index": null,
+      "domain": null,
+      "enum_labels": {
+        "443": "https",
+        "53": "dns",
+        "70000": "well_known",
+        "71000": "registered",
+        "72000": "dynamic",
+        "80": "http"
+      },
+      "name": "DstPortClass",
+      "roles": [
+        "dst",
+        "identifier"
+      ],
+      "source_name": null,
+      "value_type": "integer"
+    },
+    {
+      "bounds": null,
+      "constants": [
+        {
+          "description": "Maximum payload size per packet",
+          "kind": "scalar",
+          "values": [
+            65535
+          ]
+        }
+      ],
+      "context_family": null,
+      "context_index": null,
+      "domain": null,
+      "enum_labels": {},
+      "name": "Packets",
+      "roles": [
+        "count",
+        "measurement"
+      ],
+      "source_name": null,
+      "value_type": "integer"
+    },
+    {
+      "bounds": null,
+      "constants": [
+        {
+          "description": "Common packet-size bounds",
+          "kind": "limit",
+          "values": [
+            64,
+            1500
+          ]
+        },
+        {
+          "description": "Header-size offsets",
+          "kind": "addition",
+          "values": [
+            20,
+            40
+          ]
+        }
+      ],
+      "context_family": null,
+      "context_index": null,
+      "domain": null,
+      "enum_labels": {},
+      "name": "Bytes",
+      "roles": [
+        "size",
+        "measurement"
+      ],
+      "source_name": null,
+      "value_type": "integer"
+    },
+    {
+      "bounds": null,
+      "constants": [],
+      "context_family": null,
+      "context_index": null,
+      "domain": null,
+      "enum_labels": {},
+      "name": "Flows",
+      "roles": [
+        "count"
+      ],
+      "source_name": null,
+      "value_type": "integer"
+    },
+    {
+      "bounds": null,
+      "constants": [],
+      "context_family": null,
+      "context_index": null,
+      "domain": null,
+      "enum_labels": {},
+      "name": "Flags",
+      "roles": [
+        "flag"
+      ],
+      "source_name": null,
+      "value_type": "categorical"
+    },
+    {
+      "bounds": null,
+      "constants": [],
+      "context_family": null,
+      "context_index": null,
+      "domain": null,
+      "enum_labels": {},
+      "name": "Tos",
+      "roles": [
+        "measurement"
+      ],
+      "source_name": null,
+      "value_type": "categorical"
+    }
+  ],
+  "grouping_keys": [],
+  "include_fields": [
+    "Duration",
+    "Proto",
+    "SrcSubnet",
+    "DstSubnet",
+    "SrcPortClass",
+    "DstPortClass",
+    "Packets",
+    "Bytes",
+    "Flags",
+    "Tos"
+  ],
+  "name": "network_cidds",
+  "ordering_keys": [
+    "DateFirstSeen"
+  ],
+  "preprocessing": [
+    {
+      "by": [],
+      "columns": [
+        "SrcPt"
+      ],
+      "dtype": null,
+      "kind": "map_rules",
+      "mapping": {},
+      "rules": [
+        {
+          "inclusive_lower": true,
+          "inclusive_upper": true,
+          "lower": null,
+          "mode": "equals",
+          "output": 53,
+          "upper": null,
+          "value": 53,
+          "values": []
+        },
+        {
+          "inclusive_lower": true,
+          "inclusive_upper": true,
+          "lower": null,
+          "mode": "equals",
+          "output": 80,
+          "upper": null,
+          "value": 80,
+          "values": []
+        },
+        {
+          "inclusive_lower": true,
+          "inclusive_upper": true,
+          "lower": null,
+          "mode": "equals",
+          "output": 443,
+          "upper": null,
+          "value": 443,
+          "values": []
+        },
+        {
+          "inclusive_lower": true,
+          "inclusive_upper": true,
+          "lower": 0,
+          "mode": "range",
+          "output": 70000,
+          "upper": 1023,
+          "value": null,
+          "values": []
+        },
+        {
+          "inclusive_lower": true,
+          "inclusive_upper": true,
+          "lower": 1024,
+          "mode": "range",
+          "output": 71000,
+          "upper": 49151,
+          "value": null,
+          "values": []
+        },
+        {
+          "inclusive_lower": true,
+          "inclusive_upper": true,
+          "lower": null,
+          "mode": "default",
+          "output": 72000,
+          "upper": null,
+          "value": null,
+          "values": []
+        }
+      ],
+      "target_column": "SrcPortClass",
+      "value": null
+    },
+    {
+      "by": [],
+      "columns": [
+        "DstPt"
+      ],
+      "dtype": null,
+      "kind": "map_rules",
+      "mapping": {},
+      "rules": [
+        {
+          "inclusive_lower": true,
+          "inclusive_upper": true,
+          "lower": null,
+          "mode": "equals",
+          "output": 53,
+          "upper": null,
+          "value": 53,
+          "values": []
+        },
+        {
+          "inclusive_lower": true,
+          "inclusive_upper": true,
+          "lower": null,
+          "mode": "equals",
+          "output": 80,
+          "upper": null,
+          "value": 80,
+          "values": []
+        },
+        {
+          "inclusive_lower": true,
+          "inclusive_upper": true,
+          "lower": null,
+          "mode": "equals",
+          "output": 443,
+          "upper": null,
+          "value": 443,
+          "values": []
+        },
+        {
+          "inclusive_lower": true,
+          "inclusive_upper": true,
+          "lower": 0,
+          "mode": "range",
+          "output": 70000,
+          "upper": 1023,
+          "value": null,
+          "values": []
+        },
+        {
+          "inclusive_lower": true,
+          "inclusive_upper": true,
+          "lower": 1024,
+          "mode": "range",
+          "output": 71000,
+          "upper": 49151,
+          "value": null,
+          "values": []
+        },
+        {
+          "inclusive_lower": true,
+          "inclusive_upper": true,
+          "lower": null,
+          "mode": "default",
+          "output": 72000,
+          "upper": null,
+          "value": null,
+          "values": []
+        }
+      ],
+      "target_column": "DstPortClass",
+      "value": null
+    },
+    {
+      "by": [],
+      "columns": [
+        "SrcIpAddr"
+      ],
+      "dtype": null,
+      "kind": "map_rules",
+      "mapping": {},
+      "rules": [
+        {
+          "inclusive_lower": true,
+          "inclusive_upper": true,
+          "lower": null,
+          "mode": "equals",
+          "output": 0,
+          "upper": null,
+          "value": "0.0.0.0",
+          "values": []
+        },
+        {
+          "inclusive_lower": true,
+          "inclusive_upper": true,
+          "lower": null,
+          "mode": "equals",
+          "output": 888,
+          "upper": null,
+          "value": "DNS",
+          "values": []
+        },
+        {
+          "inclusive_lower": true,
+          "inclusive_upper": true,
+          "lower": null,
+          "mode": "prefix",
+          "output": 100,
+          "upper": null,
+          "value": "192.168.100.",
+          "values": []
+        },
+        {
+          "inclusive_lower": true,
+          "inclusive_upper": true,
+          "lower": null,
+          "mode": "prefix",
+          "output": 200,
+          "upper": null,
+          "value": "192.168.200.",
+          "values": []
+        },
+        {
+          "inclusive_lower": true,
+          "inclusive_upper": true,
+          "lower": null,
+          "mode": "prefix",
+          "output": 210,
+          "upper": null,
+          "value": "192.168.210.",
+          "values": []
+        },
+        {
+          "inclusive_lower": true,
+          "inclusive_upper": true,
+          "lower": null,
+          "mode": "prefix",
+          "output": 220,
+          "upper": null,
+          "value": "192.168.220.",
+          "values": []
+        },
+        {
+          "inclusive_lower": true,
+          "inclusive_upper": true,
+          "lower": null,
+          "mode": "default",
+          "output": 666,
+          "upper": null,
+          "value": null,
+          "values": []
+        }
+      ],
+      "target_column": "SrcSubnet",
+      "value": null
+    },
+    {
+      "by": [],
+      "columns": [
+        "DstIpAddr"
+      ],
+      "dtype": null,
+      "kind": "map_rules",
+      "mapping": {},
+      "rules": [
+        {
+          "inclusive_lower": true,
+          "inclusive_upper": true,
+          "lower": null,
+          "mode": "equals",
+          "output": 0,
+          "upper": null,
+          "value": "0.0.0.0",
+          "values": []
+        },
+        {
+          "inclusive_lower": true,
+          "inclusive_upper": true,
+          "lower": null,
+          "mode": "equals",
+          "output": 888,
+          "upper": null,
+          "value": "DNS",
+          "values": []
+        },
+        {
+          "inclusive_lower": true,
+          "inclusive_upper": true,
+          "lower": null,
+          "mode": "prefix",
+          "output": 100,
+          "upper": null,
+          "value": "192.168.100.",
+          "values": []
+        },
+        {
+          "inclusive_lower": true,
+          "inclusive_upper": true,
+          "lower": null,
+          "mode": "prefix",
+          "output": 200,
+          "upper": null,
+          "value": "192.168.200.",
+          "values": []
+        },
+        {
+          "inclusive_lower": true,
+          "inclusive_upper": true,
+          "lower": null,
+          "mode": "prefix",
+          "output": 210,
+          "upper": null,
+          "value": "192.168.210.",
+          "values": []
+        },
+        {
+          "inclusive_lower": true,
+          "inclusive_upper": true,
+          "lower": null,
+          "mode": "prefix",
+          "output": 220,
+          "upper": null,
+          "value": "192.168.220.",
+          "values": []
+        },
+        {
+          "inclusive_lower": true,
+          "inclusive_upper": true,
+          "lower": null,
+          "mode": "default",
+          "output": 666,
+          "upper": null,
+          "value": null,
+          "values": []
+        }
+      ],
+      "target_column": "DstSubnet",
+      "value": null
+    }
+  ],
+  "source": {
+    "csv_read_options": {},
+    "path": "../../../../NetNomos/data/cidds_wk2_normal_10k.csv",
+    "type": "csv"
+  }
+}

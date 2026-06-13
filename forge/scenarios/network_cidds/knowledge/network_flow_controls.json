@@ -1,0 +1,27 @@
+{
+  "doc_title": "Network CIDDS Flow Controls",
+  "source": "forge/scenarios/network_cidds",
+  "tags": ["network", "CIDDS", "NetFlow", "rule-card"],
+  "sections": [
+    {
+      "heading": "UDP 与 flags 的协议语义",
+      "tags": ["Proto", "UDP", "Flags", "noflags", "implication", "N01", "协议"],
+      "body": "UDP 是无连接传输协议，不使用 TCP 的 SYN、ACK、FIN、RST 等连接状态标志。因此在 NetFlow 规则中，Proto=UDP 蕴含 Flags=noflags 属于协议语义约束，而不是单纯统计相关。违反该规则通常意味着字段解析错误、协议映射错误或生成模型把 TCP 状态迁移到了 UDP 流量。"
+    },
+    {
+      "heading": "流量体积与物理边界",
+      "tags": ["Packets", "Bytes", "bound", "range", "上界", "N02"],
+      "body": "Packets 和 Bytes 应满足基本体积边界：报文字节数不能为负，通常也不应小于包数所暗示的最小开销。极端常量边界需要结合采样窗口和链路环境判断，避免把训练集偶然最大值误解释为真实安全边界。"
+    },
+    {
+      "heading": "DNS 服务端口规则",
+      "tags": ["DNS", "Pt", "DstPt", "SrcPt", "53", "implication", "端口"],
+      "body": "DNS 标准服务端口通常为 53，网络流记录中出现 DNS 应用标签时，源端口或目的端口至少应与 53 端口关系一致。违反该规则可能指向应用识别误判、端口漂移、隧道化流量或生成数据未遵守服务端口约束。"
+    },
+    {
+      "heading": "规则支持度与巧合过滤",
+      "tags": ["support", "coincidence", "疑似巧合", "NetNomos"],
+      "body": "NetNomos 从正常流量中学习出的规则需要结合支持度、常量可解释性和协议背景判断。支持度低且包含过于具体的数值常量时，应优先标记为疑似巧合规则，在前端置灰或降低解释置信度。"
+    }
+  ]
+}

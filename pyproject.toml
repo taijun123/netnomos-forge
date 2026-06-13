@@ -1,0 +1,54 @@
+# pyproject.toml — netnomos-forge 包元数据与依赖声明（Server-Dev 维护）
+# 宿主机：uv sync && uv run uvicorn server.app:create_app --factory --port 8000 --reload
+# 本地路径依赖：netnomos/lejit 经 [tool.uv.sources] 指向同级仓库（参考 LeJIT/pyproject.toml 的写法）
+[project]
+name = "netnomos-forge"
+version = "0.1.0"
+description = "NetNomos/LeJIT 产品化演示：规则自发现 + 约束生成 + 双轨合规报告"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.32.0",
+  "sse-starlette>=2.1.0",
+  "pandas>=2.2.3",
+  "numpy>=1.26.4",
+  "jinja2>=3.1.4",
+  "pyyaml>=6.0",
+  "requests>=2.32.0",
+  "python-multipart>=0.0.20",
+  "torch==2.8.0+cu128",
+  "netnomos",
+  "lejit",
+]
+
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["forge", "server"]
+
+[tool.uv]
+package = true
+
+[tool.uv.sources]
+# 目录约定：<workspace>/netnomos-forge 与 NetNomos、LeJIT 同级
+netnomos = { path = "../NetNomos", editable = true }
+lejit = { path = "../LeJIT", editable = true }
+torch = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3.5",
+  "ruff>=0.11.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

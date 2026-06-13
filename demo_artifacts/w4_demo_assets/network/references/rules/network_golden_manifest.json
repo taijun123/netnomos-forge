@@ -1,0 +1,31 @@
+{
+  "auto_excluded_fields": {},
+  "configured_exclude_fields": [
+    "Flows"
+  ],
+  "dataset": "network_cidds",
+  "excluded_fields": [
+    "Flows"
+  ],
+  "fit_metadata": {
+    "evidence_cache_hit": false,
+    "evidence_cache_path": "E:\\yanchh\\model_control\\netnomos-forge\\forge\\rulesets\\network_cidds\\runs\\.cache\\evidence\\network_cidds_260613-105246.pkl",
+    "evidence_set_count": 10000,
+    "hitting_set_backend_requested": "python",
+    "hitting_set_backend_used": "python",
+    "hitting_set_native_available": false,
+    "rule_count_after_prune": 922,
+    "rule_count_before_prune": 1000,
+    "search_elapsed_seconds": 2.234999999998763,
+    "search_stopped_early": false,
+    "stall_elapsed_seconds": 0.0,
+    "stall_timeout_seconds": null,
+    "stop_reason": "max-rules"
+  },
+  "grammar": "network_flow",
+  "learner": "hitting-set",
+  "predicate_count": 94,
+  "row_count": 10000,
+  "rule_count": 922,
+  "source_type": "csv"
+}

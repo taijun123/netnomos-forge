@@ -1,0 +1,32 @@
+{
+  "doc_title": "Finance Scenario Controls",
+  "source": "forge/scenarios/finance_v1",
+  "tags": ["finance", "财务报表", "rule-card"],
+  "sections": [
+    {
+      "heading": "存货与营业成本滚动",
+      "tags": ["Inventory", "COGS", "Purchases", "identity", "R01", "存货", "营业成本"],
+      "body": "进销存勾稽要求本期存货期末数等于期初存货加采购再减营业成本。该关系把采购入库、成本结转和期末盘点连接在一起，常用于发现成本结转错误、期末存货录入错误或采购截止错误。若该规则被打破，B 轨应优先回看 COGS、Purchases、Inventory_Begin、Inventory_End 四个字段的来源和跨表引用。"
+    },
+    {
+      "heading": "资产负债表配平",
+      "tags": ["TotalAssets", "TotalLiabilities", "TotalEquity", "identity", "R02", "资产", "负债", "权益"],
+      "body": "资产负债表的基本会计恒等式是资产等于负债加所有者权益。该规则通常不应被统计采样打破，因为它来自复式记账结构而非经验相关性。违反时通常意味着口径错配、漏记科目或人工填报错误。"
+    },
+    {
+      "heading": "跨期滚动科目",
+      "tags": ["Inventory_Begin", "Inventory_End", "Cash_Begin", "Cash_End", "roll-forward", "R03", "R04"],
+      "body": "存货和现金等连续性科目需要跨期滚动：下一期的期初数应承接上一期的期末数。滚动规则被破坏时，单期报表可能看似平衡，但时间序列会暴露期初数搬运错误、期末数未同步或期间顺序错置。"
+    },
+    {
+      "heading": "毛利与收入成本匹配",
+      "tags": ["GrossProfit", "Revenue", "COGS", "identity", "R05", "毛利", "营业收入"],
+      "body": "毛利是营业收入减营业成本后的结果，用于检查收入确认和成本匹配。若毛利与收入、成本不一致，说明报告正文中的盈利能力描述可能继承了错误数字，A 轨容易把错误成本继续带入毛利率叙事。"
+    },
+    {
+      "heading": "行业画像与比率软规则",
+      "tags": ["InventoryToAssetsBp", "ReceivableToRevenueBp", "range", "ratio", "R06", "R07", "画像"],
+      "body": "行业画像和比率规则不等同于硬会计恒等式，应作为风险提示而不是强制修数依据。库存占资产或应收占收入显著偏离同业区间时，适合提示审阅者进一步查看业务模式、季节性和客户账期，而不是直接判定报表错误。"
+    }
+  ]
+}

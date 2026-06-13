@@ -1,0 +1,20 @@
+{
+  "dataset_name": "network_cidds",
+  "dataset_spec": "E:\\yanchh\\model_control\\netnomos-forge\\forge\\scenarios\\network_cidds\\dataset_spec.json",
+  "excluded_fields": {},
+  "field_order": [
+    "Duration",
+    "Proto",
+    "SrcSubnet",
+    "DstSubnet",
+    "SrcPortClass",
+    "DstPortClass",
+    "Packets",
+    "Bytes",
+    "Flags",
+    "Tos"
+  ],
+  "input_path": "E:\\yanchh\\model_control\\NetNomos\\data\\cidds_wk2_normal_10k.csv",
+  "rule_count": 922,
+  "rules_path": "E:\\yanchh\\model_control\\netnomos-forge\\forge\\rulesets\\network_cidds\\golden\\rules.json"
+}

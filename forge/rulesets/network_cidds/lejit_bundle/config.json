@@ -1,0 +1,53 @@
+{
+  "dataset": {
+    "dataset_spec": "dataset_spec.json",
+    "input_path": "E:\\yanchh\\model_control\\NetNomos\\data\\cidds_wk2_normal_10k.csv",
+    "limit": null,
+    "rules_path": "rules.json"
+  },
+  "decoding": {
+    "backtrack_limit": 50,
+    "do_sample": true,
+    "max_new_tokens": null,
+    "num_return_sequences": 1,
+    "temperature": 1.0,
+    "top_k": null,
+    "top_p": null
+  },
+  "model": {
+    "architecture": "gpt2",
+    "config_overrides": {
+      "n_ctx": 512,
+      "n_embd": 256,
+      "n_head": 8,
+      "n_layer": 6,
+      "n_positions": 512
+    },
+    "mode": "config",
+    "name_or_path": null
+  },
+  "run": {
+    "batch_size": 1,
+    "n_samples": 100,
+    "prompt_columns": null,
+    "samples_per_prompt": 1
+  },
+  "serialization": {
+    "field_order": null,
+    "force_string_fields": [],
+    "max_categorical_domain": null,
+    "numeric_precision": 6
+  },
+  "training": {
+    "batch_size": 16,
+    "epochs": 3,
+    "gradient_accumulation_steps": 1,
+    "learning_rate": 0.0005,
+    "logging_steps": 10,
+    "max_steps": -1,
+    "save_steps": 100,
+    "seed": 42,
+    "warmup_ratio": 0.0,
+    "weight_decay": 0.0
+  }
+}

@@ -1,0 +1,9 @@
+DateFirstSeen,Duration,Proto,SrcIpAddr,SrcPt,DstIpAddr,DstPt,Packets,Bytes,Flows,Flags,Tos,DemoNote
+2017-03-23 09:21:12.103,0.003,UDP,192.168.220.8,34358,DNS,53,2,164,1,......,0,clean_dns_udp_baseline
+2017-03-23 09:22:45.870,0.004,UDP,192.168.220.12,51413,DNS,53,2,196,1,.AP.SF,0,anomaly_udp_with_tcp_flags
+2017-03-23 09:23:02.444,0.310,TCP,192.168.220.16,37922,10082_43,443,1,90000,1,.AP.SF,0,anomaly_bytes_above_packet_upper_bound
+2017-03-23 09:24:18.009,0.000,TCP,192.168.220.4,57656,10056_105,443,10,200,1,.A....,0,anomaly_bytes_below_packet_lower_bound
+2017-03-23 09:25:33.512,0.002,UDP,192.168.220.14,41608,10081_164,53,2,178,1,......,0,anomaly_dns_port_identity_mismatch
+2017-03-23 09:26:01.220,1.840,TCP,192.168.220.5,49152,192.168.100.3,8000,12,6480,1,.AP.SF,0,clean_tcp_application_flow
+2017-03-23 09:27:54.781,0.000,UDP,192.168.220.9,137,192.168.220.255,137,1,92,1,......,0,clean_udp_broadcast
+2017-03-23 09:28:27.336,0.460,TCP,192.168.210.5,445,192.168.220.15,52174,9,4122,1,.AP.SF,0,clean_tcp_file_service

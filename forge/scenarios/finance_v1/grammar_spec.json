@@ -1,0 +1,135 @@
+{
+  "name": "finance_v1",
+  "description": "财务语法：限定 比较 / 线性恒等式（addition 项）/ 蕴含式 谓词空间；数值常量来自数据分位数与字段区间端点（field_constants kinds=limit）",
+  "max_clause_size": 6,
+  "max_rules": 5000,
+  "predicate_templates": [
+    {
+      "name": "industry-assignments",
+      "lhs": {
+        "names": ["Industry"]
+      },
+      "operators": ["=", "!="],
+      "rhs_constant": {
+        "mode": "field_constants",
+        "kinds": ["assignment"]
+      }
+    },
+    {
+      "name": "balance-identity",
+      "lhs_term": {
+        "kind": "addition",
+        "field": {
+          "names": ["TotalLiabilities"]
+        },
+        "other_field": {
+          "names": ["TotalEquity"]
+        }
+      },
+      "operators": ["=", "<=", ">="],
+      "rhs_term": {
+        "kind": "field",
+        "field": {
+          "names": ["TotalAssets"]
+        }
+      }
+    },
+    {
+      "name": "gross-profit-identity",
+      "lhs_term": {
+        "kind": "addition",
+        "field": {
+          "names": ["COGS"]
+        },
+        "other_field": {
+          "names": ["GrossProfit"]
+        }
+      },
+      "operators": ["=", "<=", ">="],
+      "rhs_term": {
+        "kind": "field",
+        "field": {
+          "names": ["Revenue"]
+        }
+      }
+    },
+    {
+      "name": "inventory-flow-identity",
+      "lhs_term": {
+        "kind": "addition",
+        "field": {
+          "names": ["Inventory_Begin"]
+        },
+        "other_field": {
+          "names": ["InventoryNetInflow"]
+        }
+      },
+      "operators": ["=", "<=", ">="],
+      "rhs_term": {
+        "kind": "field",
+        "field": {
+          "names": ["Inventory_End"]
+        }
+      }
+    },
+    {
+      "name": "purchases-identity",
+      "lhs_term": {
+        "kind": "addition",
+        "field": {
+          "names": ["COGS"]
+        },
+        "other_field": {
+          "names": ["InventoryNetInflow"]
+        }
+      },
+      "operators": ["=", "<=", ">="],
+      "rhs_term": {
+        "kind": "field",
+        "field": {
+          "names": ["Purchases"]
+        }
+      }
+    },
+    {
+      "name": "ratio-band-thresholds",
+      "lhs": {
+        "names": ["InventoryToAssetsBp", "ReceivableToRevenueBp", "InventoryNetInflow"]
+      },
+      "operators": ["<=", ">=", "<", ">"],
+      "rhs_constant": {
+        "mode": "field_constants",
+        "kinds": ["limit"]
+      }
+    },
+    {
+      "name": "numeric-quantiles",
+      "lhs": {
+        "types": ["integer"],
+        "exclude": ["PeriodIndex", "InventoryToAssetsBp", "ReceivableToRevenueBp"]
+      },
+      "operators": [">", ">=", "<", "<="],
+      "rhs_constant": {
+        "mode": "profile",
+        "quantiles": [0.25, 0.5, 0.75, 0.9]
+      }
+    },
+    {
+      "name": "profit-capacity",
+      "lhs_term": {
+        "kind": "field",
+        "field": {
+          "names": ["NetProfit"]
+        }
+      },
+      "operators": ["<="],
+      "rhs_term": {
+        "kind": "field",
+        "field": {
+          "names": ["GrossProfit", "Revenue"]
+        }
+      }
+    }
+  ],
+  "quantifier_templates": []
+}

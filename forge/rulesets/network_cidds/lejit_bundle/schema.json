@@ -1,0 +1,265 @@
+{
+  "auto_excluded_fields": {},
+  "configured_exclude_fields": [
+    "Flows"
+  ],
+  "context_families": {},
+  "dataset_name": "network_cidds",
+  "field_order": [
+    "Duration",
+    "Proto",
+    "SrcSubnet",
+    "DstSubnet",
+    "SrcPortClass",
+    "DstPortClass",
+    "Packets",
+    "Bytes",
+    "Flags",
+    "Tos"
+  ],
+  "fields": {
+    "Bytes": {
+      "context_family": null,
+      "context_index": null,
+      "domain": [],
+      "encoding_kind": "numeric",
+      "enum_labels": {},
+      "lower_bound": 54,
+      "name": "Bytes",
+      "numeric_codec": {
+        "fraction_digits": 0,
+        "integer_digits": 9,
+        "signed": false
+      },
+      "roles": [
+        "size",
+        "measurement"
+      ],
+      "upper_bound": 320100000,
+      "value_type": "integer"
+    },
+    "DstPortClass": {
+      "context_family": null,
+      "context_index": null,
+      "domain": [],
+      "encoding_kind": "numeric",
+      "enum_labels": {
+        "443": "https",
+        "53": "dns",
+        "70000": "well_known",
+        "71000": "registered",
+        "72000": "dynamic",
+        "80": "http"
+      },
+      "lower_bound": 53,
+      "name": "DstPortClass",
+      "numeric_codec": {
+        "fraction_digits": 0,
+        "integer_digits": 5,
+        "signed": false
+      },
+      "roles": [
+        "dst",
+        "identifier"
+      ],
+      "upper_bound": 72000,
+      "value_type": "integer"
+    },
+    "DstSubnet": {
+      "context_family": null,
+      "context_index": null,
+      "domain": [],
+      "encoding_kind": "numeric",
+      "enum_labels": {
+        "0": "unspecified",
+        "100": "servers",
+        "200": "management",
+        "210": "office",
+        "220": "developer",
+        "666": "public",
+        "888": "dns"
+      },
+      "lower_bound": 100,
+      "name": "DstSubnet",
+      "numeric_codec": {
+        "fraction_digits": 0,
+        "integer_digits": 3,
+        "signed": false
+      },
+      "roles": [
+        "dst",
+        "identifier"
+      ],
+      "upper_bound": 888,
+      "value_type": "integer"
+    },
+    "Duration": {
+      "context_family": null,
+      "context_index": null,
+      "domain": [],
+      "encoding_kind": "numeric",
+      "enum_labels": {},
+      "lower_bound": 0.0,
+      "name": "Duration",
+      "numeric_codec": {
+        "fraction_digits": 3,
+        "integer_digits": 2,
+        "signed": false
+      },
+      "roles": [
+        "time",
+        "measurement"
+      ],
+      "upper_bound": 45.236,
+      "value_type": "real"
+    },
+    "Flags": {
+      "context_family": null,
+      "context_index": null,
+      "domain": [
+        "......",
+        "....S.",
+        "...R..",
+        ".A....",
+        ".A...F",
+        ".A..S.",
+        ".A..SF",
+        ".A.R..",
+        ".A.R.F",
+        ".AP...",
+        ".AP..F",
+        ".AP.S.",
+        ".AP.SF",
+        ".APR..",
+        ".APR.F",
+        ".APRS.",
+        ".APRSF"
+      ],
+      "encoding_kind": "categorical",
+      "enum_labels": {},
+      "lower_bound": null,
+      "name": "Flags",
+      "numeric_codec": null,
+      "roles": [
+        "flag"
+      ],
+      "upper_bound": null,
+      "value_type": "categorical"
+    },
+    "Packets": {
+      "context_family": null,
+      "context_index": null,
+      "domain": [],
+      "encoding_kind": "numeric",
+      "enum_labels": {},
+      "lower_bound": 1,
+      "name": "Packets",
+      "numeric_codec": {
+        "fraction_digits": 0,
+        "integer_digits": 5,
+        "signed": false
+      },
+      "roles": [
+        "count",
+        "measurement"
+      ],
+      "upper_bound": 82947,
+      "value_type": "integer"
+    },
+    "Proto": {
+      "context_family": null,
+      "context_index": null,
+      "domain": [
+        "ICMP",
+        "IGMP",
+        "TCP",
+        "UDP"
+      ],
+      "encoding_kind": "categorical",
+      "enum_labels": {},
+      "lower_bound": null,
+      "name": "Proto",
+      "numeric_codec": null,
+      "roles": [
+        "proto"
+      ],
+      "upper_bound": null,
+      "value_type": "categorical"
+    },
+    "SrcPortClass": {
+      "context_family": null,
+      "context_index": null,
+      "domain": [],
+      "encoding_kind": "numeric",
+      "enum_labels": {
+        "443": "https",
+        "53": "dns",
+        "70000": "well_known",
+        "71000": "registered",
+        "72000": "dynamic",
+        "80": "http"
+      },
+      "lower_bound": 53,
+      "name": "SrcPortClass",
+      "numeric_codec": {
+        "fraction_digits": 0,
+        "integer_digits": 5,
+        "signed": false
+      },
+      "roles": [
+        "src",
+        "identifier"
+      ],
+      "upper_bound": 72000,
+      "value_type": "integer"
+    },
+    "SrcSubnet": {
+      "context_family": null,
+      "context_index": null,
+      "domain": [],
+      "encoding_kind": "numeric",
+      "enum_labels": {
+        "0": "unspecified",
+        "100": "servers",
+        "200": "management",
+        "210": "office",
+        "220": "developer",
+        "666": "public",
+        "888": "dns"
+      },
+      "lower_bound": 100,
+      "name": "SrcSubnet",
+      "numeric_codec": {
+        "fraction_digits": 0,
+        "integer_digits": 3,
+        "signed": false
+      },
+      "roles": [
+        "src",
+        "identifier"
+      ],
+      "upper_bound": 888,
+      "value_type": "integer"
+    },
+    "Tos": {
+      "context_family": null,
+      "context_index": null,
+      "domain": [
+        0,
+        16,
+        32,
+        192
+      ],
+      "encoding_kind": "categorical",
+      "enum_labels": {},
+      "lower_bound": null,
+      "name": "Tos",
+      "numeric_codec": null,
+      "roles": [
+        "measurement"
+      ],
+      "upper_bound": null,
+      "value_type": "categorical"
+    }
+  }
+}
