@@ -1,6 +1,7 @@
 import { API } from "../types/api";
 import type { DualReport, Rule, RuleCard, Scenario, Violation, WorkflowEvent } from "../types/api";
 import type { MockSequenceId } from "../mock/sse";
+import { logger } from "./logger";
 
 export interface WorkflowJobResult {
   ruleset_id?: string;
@@ -97,12 +98,29 @@ export function workflowPayloadFromLatestDataSource(
 }
 
 async function readJson<T>(res: Response): Promise<T> {
-  const text = await res.text();
-  if (!res.ok) {
-    const detail = text ? `: ${text.slice(0, 180)}` : "";
-    throw new Error(`API ${res.status}${detail}`);
+  const startTime = performance.now();
+  const url = res.url;
+
+  try {
+    const text = await res.text();
+    const duration = performance.now() - startTime;
+
+    if (!res.ok) {
+      const detail = text ? `: ${text.slice(0, 180)}` : "";
+      const error = new Error(`API ${res.status}${detail}`);
+      logger.apiError('UNKNOWN', url || res.url, error);
+      throw error;
+    }
+
+    const data = (text ? JSON.parse(text) : {}) as T;
+    logger.apiResponse('UNKNOWN', url || res.url, res.status, Math.round(duration));
+    return data;
+  } catch (err) {
+    if (err instanceof Error) {
+      logger.apiError('UNKNOWN', url || res.url, err);
+    }
+    throw err;
   }
-  return (text ? JSON.parse(text) : {}) as T;
 }
 
 export async function startWorkflowJob(

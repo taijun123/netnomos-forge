@@ -17,7 +17,7 @@ dependencies = [
   "pyyaml>=6.0",
   "requests>=2.32.0",
   "python-multipart>=0.0.20",
-  "torch==2.8.0+cu128",
+  "torch>=2.2.0",
   "netnomos",
   "lejit",
 ]
@@ -36,12 +36,6 @@ package = true
 # 目录约定：<workspace>/netnomos-forge 与 NetNomos、LeJIT 同级
 netnomos = { path = "../NetNomos", editable = true }
 lejit = { path = "../LeJIT", editable = true }
-torch = { index = "pytorch-cu128" }
-
-[[tool.uv.index]]
-name = "pytorch-cu128"
-url = "https://download.pytorch.org/whl/cu128"
-explicit = true
 
 [dependency-groups]
 dev = [

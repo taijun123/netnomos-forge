@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 import uuid
 from dataclasses import asdict
@@ -32,6 +33,7 @@ from forge.contracts import (
 from server.pipeline import SEQUENCE_PIPELINES, run_finance_pipeline, run_network_pipeline
 from server.store import JOB_DONE, JOB_FAILED, get_store
 
+# 注意：此时日志系统尚未初始化，logger 将在 create_app() 中正确配置
 log = logging.getLogger("server.app")
 
 # SSE 队列空轮询超时（秒）：超时发心跳注释行，保持连接
@@ -112,6 +114,23 @@ def _safe_upload_name(filename: str) -> str:
 
 def create_app():
     """FastAPI 工厂（fastapi 懒加载）。"""
+    # ========== 初始化日志系统 ==========
+    from forge.utils.logging_config import setup_logging  # noqa: PLC0415
+
+    setup_logging(
+        level=os.getenv("LOG_LEVEL", "INFO"),
+        log_dir=os.getenv("LOG_DIR", "logs"),
+        json_format=os.getenv("LOG_JSON", "false").lower() == "true",
+        max_bytes=int(os.getenv("LOG_MAX_BYTES", str(10 * 1024 * 1024))),
+        backup_count=int(os.getenv("LOG_BACKUP_COUNT", "5")),
+        console_level=os.getenv("LOG_CONSOLE_LEVEL", os.getenv("LOG_LEVEL", "INFO")),
+    )
+
+    # 重新获取logger，确保使用新配置
+    global log
+    log = logging.getLogger("server.app")
+    log.info("🚀 NetNomos Forge 应用初始化开始...")
+
     try:
         from fastapi import FastAPI, HTTPException, Request          # noqa: PLC0415
         from fastapi.middleware.cors import CORSMiddleware           # noqa: PLC0415
