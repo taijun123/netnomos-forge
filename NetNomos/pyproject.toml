@@ -1,0 +1,35 @@
+[project]
+# Python 包基础元数据
+name = "netnomos"
+version = "0.1.0"
+description = "Declarative rule mining for network datasets"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.26.4",
+  "pandas>=2.2.3",
+  "pydantic>=2.11.0",
+  "rich>=14.2.0",
+  "scapy>=2.6.0",
+  "scikit-learn>=1.7.1",
+  "tqdm>=4.67.1",
+  "z3-solver>=4.15.3.0",
+]
+
+[project.scripts]
+# 提供长短两个 CLI 入口
+netn = "netnomos.cli:main"
+netnomos = "netnomos.cli:main"
+
+[build-system]
+# 原生扩展通过 setuptools + pybind11 构建
+requires = ["setuptools>=80.0.0", "wheel>=0.45.1", "pybind11>=3.0.1"]
+build-backend = "setuptools.build_meta"
+
+[tool.uv]
+# 使用 uv 作为依赖与命令执行入口
+package = true
+
+[tool.setuptools.packages.find]
+include = ["netnomos*"]
