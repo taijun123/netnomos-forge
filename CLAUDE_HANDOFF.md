@@ -10,6 +10,21 @@
 
 ---
 
+## ⚠ 前端集成坑（务必先读，别再犯）
+
+**`web/src/office/` 的办公室是从 `product/` 拷来的独立子应用，有自己的 CSS 主题（浅色）；而 `web/src/styles.css` 是整站主题（深色）。两者通过全局 `:root` 共享 CSS 变量名会互相覆盖。**
+
+- **症状**：曾导致 `#/office` 路由布局崩坏——左侧栏/办公室/状态面板从三栏变成全宽竖直堆叠；办公室文字近白不可见。
+- **根因**：web 深色主题 `:root` 定义了 `--panel`（一个**颜色** `rgba(20,28,44,.62)`）、`--text:#eaf0fb`、`--bg:#070b14` 等，与办公室同名 `:root` 变量冲突且 web 在级联中胜出。`--panel` 变成颜色后，办公室 `.workspace` 的 `grid-template-columns: ... var(--panel)` 整条声明非法被丢弃 → 三栏 grid 塌成单列。
+- **已修复**（2026-06-13）：`web/src/office/styles.css` 把变量块从 `:root {` 改为 **`.app {`**（作用域收敛到办公室根容器），并把布局变量重命名为 `--office-sidebar`/`--office-panel`。办公室内用自己的浅色变量，外部 web 用深色，双向隔离。
+- **铁律**：
+  1. **不要**把 `web/src/office/styles.css` 的变量块改回 `:root`；办公室变量必须定义在 `.app`（或 office 容器）作用域内。
+  2. **不要**在两套 styles.css 里用同名 `:root` 变量（尤其 `--panel`/`--text`/`--bg`/`--sidebar`/`--shadow`/`--line`）。
+  3. **若再次把 `product/` 同步覆盖到 `web/src/office/`**：必须重新施加上述 `:root → .app` 作用域 + 变量改名，否则 bug 复现。
+  4. 验证：浏览器控制台 `getComputedStyle(document.querySelector('.workspace')).gridTemplateColumns` 应是三段（如 `174px ... 340px`）而非单段。
+
+---
+
 ## 二、已完成的工作
 
 | 模块 | 文件 | 状态 |

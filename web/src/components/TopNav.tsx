@@ -1,3 +1,6 @@
+import { useDemo } from "../demo/DemoContext";
+import { DemoStartMenu } from "../demo/DemoStartMenu";
+
 export type Route = "intro" | "network" | "finance" | "office";
 
 const ITEMS: Array<{ id: Route; label: string }> = [
@@ -14,6 +17,7 @@ export function TopNav({
   route: Route;
   onNavigate: (r: Route) => void;
 }) {
+  const { startDemo } = useDemo();
   return (
     <header className="topnav">
       <button className="topnav-brand" onClick={() => onNavigate("intro")}>
@@ -33,20 +37,10 @@ export function TopNav({
             onClick={() => onNavigate(item.id)}
           >
             {item.label}
-            {item.id === "office" && <i className="topnav-soon">soon</i>}
           </button>
         ))}
       </nav>
-      <a
-        className="topnav-cta"
-        href="#/network"
-        onClick={(e) => {
-          e.preventDefault();
-          onNavigate("network");
-        }}
-      >
-        开始演示
-      </a>
+      <DemoStartMenu variant="topnav" onPick={(mode, sub) => startDemo(mode, sub)} />
     </header>
   );
 }

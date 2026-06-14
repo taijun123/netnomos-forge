@@ -46,6 +46,23 @@ export interface UploadedDataSourceRecord extends DataSourceUploadResult {
   uploadedAt: number;
 }
 
+export interface RuleSetUploadResult {
+  rulesetId: string;
+  ruleCount: number;
+}
+
+export interface ConstrainedChatResult {
+  reply?: string;
+  content?: string;
+  messageId?: string;
+  constrained?: boolean;
+  matchedRules?: string[];
+  citations?: string[];
+  checks?: string[];
+  flagged_numbers?: string[];
+  backend?: string;
+}
+
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
 
 const SEQUENCE_SCENARIO: Record<MockSequenceId, Scenario> = {
@@ -153,6 +170,85 @@ export async function uploadDataSource(
     uploadedAt: Date.now(),
   });
   return result;
+}
+
+export async function uploadOfficeRuleset(): Promise<RuleSetUploadResult> {
+  const res = await fetch(apiUrl(API.RULESETS_UPLOAD), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scenario: "office_demo" satisfies Scenario }),
+  });
+  const raw = await readJson<Partial<RuleSetUploadResult>>(res);
+  const rulesetId = raw.rulesetId;
+  if (!rulesetId) throw new Error("upload ruleset returned no rulesetId");
+  return { rulesetId, ruleCount: raw.ruleCount ?? 0 };
+}
+
+export async function uploadOfficeDataSource(
+  file: File,
+  note = "office demo data source"
+): Promise<DataSourceUploadResult> {
+  return uploadDataSource("office_demo", file, note);
+}
+
+export async function registerOfficeDemoDataSource(
+  filename = "demo-pcap-csv-source.csv",
+  note = "office demo registered data source"
+): Promise<DataSourceUploadResult> {
+  const res = await fetch(apiUrl(API.DATA_SOURCES), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scenario: "office_demo" satisfies Scenario, filename, note }),
+  });
+  const raw = await readJson<Partial<DataSourceUploadResult>>(res);
+  const dataSourceId = raw.dataSourceId;
+  if (!dataSourceId) throw new Error("register data source returned no dataSourceId");
+  return {
+    dataSourceId,
+    filename: raw.filename || filename,
+    path: raw.path || "",
+    size: raw.size ?? 0,
+  };
+}
+
+export async function startOfficeWorkflow(
+  requestPayload: WorkflowStartPayload = {}
+): Promise<string> {
+  const res = await fetch(apiUrl(API.RULESETS_LEARN), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      scenario: "office_demo" satisfies Scenario,
+      sequence: "office-demo",
+      ...compactWorkflowPayload(requestPayload),
+    }),
+  });
+  const responsePayload = await readJson<{ jobId?: string; job_id?: string }>(res);
+  const jobId = responsePayload.jobId ?? responsePayload.job_id;
+  if (!jobId) throw new Error("start office workflow returned no job id");
+  return jobId;
+}
+
+export async function sendConstrainedChatMessage(payload: {
+  conversationId: string;
+  rulesetId?: string;
+  message: string;
+  systemPrompt?: string;
+  ragFiles?: string[];
+}): Promise<ConstrainedChatResult> {
+  const res = await fetch(apiUrl(API.CHAT_CONSTRAINED), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      scenario: "office_demo" satisfies Scenario,
+      conversationId: payload.conversationId,
+      rulesetId: payload.rulesetId,
+      message: payload.message,
+      systemPrompt: payload.systemPrompt,
+      ragFiles: payload.ragFiles ?? [],
+    }),
+  });
+  return readJson<ConstrainedChatResult>(res);
 }
 
 export async function fetchWorkflowJob(jobId: string): Promise<WorkflowJobStatus> {

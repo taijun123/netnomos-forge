@@ -1,0 +1,13 @@
+{
+  "name": "office_demo",
+  "description": "Composite product demo state combining finance_v1 and network_cidds backend outputs.",
+  "source": {
+    "type": "composite",
+    "path": ""
+  },
+  "fields": [],
+  "grouping_keys": [],
+  "ordering_keys": [],
+  "preprocessing": [],
+  "derived_variables": []
+}

@@ -1,0 +1,5 @@
+{
+  "name": "office_demo",
+  "description": "Composite scenario; rules are imported from finance_v1 and network_cidds.",
+  "predicates": []
+}

@@ -48,6 +48,7 @@ class JobStore:
         self.cards: dict[str, list] = {}          # ruleset_id -> list[RuleCard]
         self.data_sources: dict[str, dict] = {}   # data_source_id -> 元信息
         self.last_dual: dict[str, Any] = {}       # scenario -> DualReport（chat 校验复用）
+        self.last_office_state: dict[str, Any] | None = None
 
     # ------------------------------------------------------------------ Job
     def create_job(

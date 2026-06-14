@@ -23,7 +23,7 @@ from importlib.util import find_spec
 from pathlib import Path
 from typing import Any, Callable
 
-from forge.contracts import Rule, RuleSet, SCENARIO_DIR, WorkflowEvent
+from forge.contracts import Rule, RuleCard, RuleSet, SCENARIO_DIR, WorkflowEvent
 
 log = logging.getLogger("server.pipeline")
 
@@ -261,6 +261,315 @@ def run_network_pipeline(job: Any, emit: Emit, llm=None,
     return {"ruleset": ruleset, "cards": cards, "dual": dual}
 
 
+# ---------------------------------------------------------------------------
+# 办公室趣味 demo：复用财务/网络规则资产，输出 6 agent 工作台状态
+# ---------------------------------------------------------------------------
+
+OFFICE_AGENT_META = [
+    {
+        "id": "supervisor",
+        "code": "A",
+        "name": "主管A",
+        "role": "流程编排与监管",
+        "status": "supervising",
+        "description": "接入规则集，监管财务与网络两条业务流水线。",
+        "color": "#2563eb",
+    },
+    {
+        "id": "courier",
+        "code": "B",
+        "name": "快递B",
+        "role": "资料接入与派送",
+        "status": "delivering",
+        "description": "接收用户上传资料，并把数据派送给分析与验证工位。",
+        "color": "#f59e0b",
+    },
+    {
+        "id": "analyst",
+        "code": "C",
+        "name": "员工C",
+        "role": "规则学习",
+        "status": "analyzing",
+        "description": "从 NetNomos 归档规则与财务恒等式中整理候选约束。",
+        "color": "#16a34a",
+    },
+    {
+        "id": "validator",
+        "code": "D",
+        "name": "员工D",
+        "role": "规则解释与核查",
+        "status": "validating",
+        "description": "把规则转成业务可读卡片，标注人工规则、自发现规则与疑似巧合。",
+        "color": "#0891b2",
+    },
+    {
+        "id": "plugin",
+        "code": "E",
+        "name": "员工E",
+        "role": "插件/报告制品",
+        "status": "building",
+        "description": "生成双轨报告、diff 片段与演示制品预览。",
+        "color": "#7c3aed",
+    },
+    {
+        "id": "pm",
+        "code": "F",
+        "name": "员工F",
+        "role": "RAG 与受控问答",
+        "status": "reviewing",
+        "description": "基于上传知识库与 B 轨白名单进行受约束回答。",
+        "color": "#db2777",
+    },
+]
+
+
+def _rule_to_office_item(rule: Rule, idx: int) -> dict[str, Any]:
+    source = "learned" if rule.source == "learned" else "preset"
+    return {
+        "id": rule.rule_id or f"RULE-{idx:03d}",
+        "text": rule.text or str(rule.formula),
+        "type": rule.kind or "constraint",
+        "enabled": rule.enabled,
+        "source": source,
+        "confidence": rule.confidence if rule.confidence is not None else rule.support,
+        "coincidence": False,
+    }
+
+
+def _load_office_rules() -> tuple[RuleSet, list[dict[str, Any]]]:
+    """Load lightweight finance/network rule groups without running training."""
+    from forge.core.engine import ForgeRuleEngine          # noqa: PLC0415
+
+    finance_engine = ForgeRuleEngine.from_scenario("finance_v1")
+    finance_ruleset = finance_engine.add_manual_rules(
+        RuleSet(scenario="finance_v1", rules=[]), FIN_MANUAL_RULES)
+
+    network_engine = ForgeRuleEngine.from_scenario("network_cidds")
+    network_ruleset = (
+        network_engine.load_netnomos_rules(GOLDEN_CIDDS_RULES)
+        if GOLDEN_CIDDS_RULES.exists()
+        else RuleSet(scenario="network_cidds", rules=[])
+    )
+
+    office_rules = list(finance_ruleset.rules) + list(network_ruleset.rules[:NET_MAX_CARDS])
+    office_ruleset = RuleSet(scenario="office_demo", rules=office_rules)
+    groups = [
+        {
+            "id": "grp-finance",
+            "name": "财务资料核查规则组",
+            "domain": "财务",
+            "discovered": False,
+            "from": "forge/scenarios/finance_v1/manual_rules.json",
+            "rules": [_rule_to_office_item(r, i) for i, r in enumerate(finance_ruleset.rules, 1)],
+        },
+        {
+            "id": "grp-network",
+            "name": "网络流量自发现规则组",
+            "domain": "网络",
+            "discovered": True,
+            "from": str(GOLDEN_CIDDS_RULES),
+            "rules": [_rule_to_office_item(r, i) for i, r in enumerate(network_ruleset.rules[:NET_MAX_CARDS], 1)],
+        },
+    ]
+    return office_ruleset, groups
+
+
+def _office_cards(ruleset: RuleSet) -> list[RuleCard]:
+    cards: list[RuleCard] = []
+    for rule in ruleset.rules[:18]:
+        title = "自发现规则" if rule.source == "learned" else "人工/领域规则"
+        cards.append(RuleCard(
+            rule_id=rule.rule_id,
+            title_zh=f"{title}：{rule.rule_id}",
+            explanation_zh=rule.text or "该规则来自当前演示规则库，可用于办公室工作台的规则墙展示。",
+            formula_text=rule.text or str(rule.formula),
+            tags=[rule.kind or "constraint", rule.source],
+            is_coincidence=False,
+            citation="NetNomos Forge office_demo aggregation",
+        ))
+    return cards
+
+
+def run_office_pipeline(job: Any, emit: Emit, llm=None,
+                        use_netnomos: bool = False) -> dict[str, Any]:
+    """Office control-room pipeline that exposes real backend state to the 3D UI."""
+    _ev(emit, "control", "running", "办公室多智能体工作台开始编排。")
+    _ev(emit, "upload", "running", "快递B读取当前财务/网络演示资料与用户上传记录。")
+
+    store_sources = []
+    try:
+        from server.store import get_store                 # noqa: PLC0415
+        store_sources = list(get_store().data_sources.values())
+    except Exception:
+        store_sources = []
+
+    data_sources = [
+        {
+            "id": "finance-demo",
+            "name": "huaxin_audit_package.csv",
+            "kind": "csv",
+            "meta": "财务待审资料包，含注入错误样例",
+            "status": "已加载",
+            "source": "preset",
+        },
+        {
+            "id": "network-demo",
+            "name": "netflow_rule_anomaly_upload.csv",
+            "kind": "csv",
+            "meta": "网络新规则核查上传样例",
+            "status": "已加载",
+            "source": "preset",
+        },
+    ]
+    for i, meta in enumerate(store_sources[-6:], 1):
+        filename = str(meta.get("filename") or meta.get("stored_filename") or f"uploaded-{i}")
+        suffix = Path(filename).suffix.lower().lstrip(".")
+        data_sources.append({
+            "id": f"upload-{i}",
+            "name": filename,
+            "kind": suffix if suffix in {"csv", "pcap", "xlsx", "pdf"} else "csv",
+            "meta": f"{meta.get('size', 0)} bytes · {meta.get('scenario', 'unknown')}",
+            "status": "已加载",
+            "source": "upload",
+        })
+    _ev(emit, "upload", "done", f"办公室资料池就绪：{len(data_sources)} 个资料源。")
+
+    _ev(emit, "learn", "running", "员工C汇总财务人工规则与网络自发现规则。")
+    ruleset, rule_groups = _load_office_rules()
+    _ev(emit, "learn", "done",
+        f"员工C完成规则汇总：财务 {len(rule_groups[0]['rules'])} 条，网络 {len(rule_groups[1]['rules'])} 条。")
+
+    _ev(emit, "explain", "running", "员工D生成规则卡并区分人工规则与自发现规则。")
+    cards = _office_cards(ruleset)
+    _ev(emit, "explain", "done", f"员工D生成 {len(cards)} 张办公室规则卡。")
+
+    _ev(emit, "report", "running", "员工E整理财务/网络双轨演示产物索引。")
+    artifacts = [
+        {
+            "id": "art-finance",
+            "title": "财务双轨报告摘要",
+            "producer": "plugin",
+            "kind": "双轨报告",
+            "time": "实时",
+            "preview": "A轨按上传资料直接撰写，B轨依据规则投影修正 COGS、资产负债、跨期滚动等字段。",
+        },
+        {
+            "id": "art-network",
+            "title": "网络规则自发现摘要",
+            "producer": "validator",
+            "kind": "规则卡",
+            "time": "实时",
+            "preview": "网络规则来自 CIDDS 10k 训练流量的 NetNomos 归档规则，办公室中标记为自发现规则组。",
+        },
+        {
+            "id": "art-rag",
+            "title": "F 受控问答说明",
+            "producer": "pm",
+            "kind": "对话留痕",
+            "time": "实时",
+            "preview": "F 通过 /api/chat/constrained 调用后端；若已有 B 轨报告，则用数值白名单标注未经核实数字。",
+        },
+    ]
+    _ev(emit, "report", "done", f"员工E归档 {len(artifacts)} 个办公室演示产物。")
+    _ev(emit, "chat", "done", "员工F已连接受规则约束问答接口。")
+    _ev(emit, "control", "done", "办公室多智能体工作台后端状态已归档。")
+
+    return {
+        "ruleset": ruleset,
+        "cards": cards,
+        "office": {
+            "agents": OFFICE_AGENT_META,
+            "ruleGroups": rule_groups,
+            "dataSources": data_sources,
+            "artifacts": artifacts,
+            "summary": {
+                "scenario": "office_demo",
+                "ruleGroupCount": len(rule_groups),
+                "dataSourceCount": len(data_sources),
+                "artifactCount": len(artifacts),
+                "backend": "real",
+            },
+        },
+    }
+
+
+# Real office_demo composite pipeline.
+def run_office_demo_pipeline(job: Any, emit: Emit, llm=None,
+                             use_netnomos: bool = False) -> dict[str, Any]:
+    """Build the office demo from real finance and network backend outputs."""
+    from forge.scenarios.office_demo import build_office_state  # noqa: PLC0415
+
+    office_events: list[WorkflowEvent] = []
+
+    def office_emit(stage: str, status: str, desc: str) -> None:
+        event = WorkflowEvent.make(stage, status, desc)
+        office_events.append(event)
+        emit(event)
+
+    office_emit("control", "running", "office_demo orchestration started for six office agents.")
+    office_emit("upload", "running", "Courier B registers finance CSV and CIDDS NetFlow sources.")
+    finance = run_finance_pipeline(job, lambda _event: None, llm=llm,
+                                   use_netnomos=use_netnomos)
+    office_emit("upload", "done", "Finance source validated and queued for rule-card packaging.")
+    office_emit("learn", "running", "Analyst C loads finance controls and network learned-rule archive.")
+    network = run_network_pipeline(job, lambda _event: None, llm=llm,
+                                   use_netnomos=use_netnomos)
+    office_emit("learn", "done", "Finance and network rule libraries are ready for the office wall.")
+
+    office_emit("explain", "running", "Validator D builds grouped rule cards for finance, network, and PM output constraints.")
+    finance_ruleset: RuleSet = finance["ruleset"]
+    network_ruleset: RuleSet = network["ruleset"]
+    network_rules = network_ruleset.rules[:NET_MAX_CARDS]
+    combined_ruleset = RuleSet(
+        scenario="office_demo",
+        rules=[*finance_ruleset.rules, *network_rules],
+        rules_path="composite:finance_v1+network_cidds",
+    )
+    combined_cards = [*finance["cards"], *network["cards"]]
+    office_emit("explain", "done",
+                f"Validator D packaged {len(combined_cards)} rule cards across finance and network groups.")
+    office_emit("validate", "done",
+                f"Finance validation found {len(finance['vreport'].violations)} violations; network B-track remains constrained.")
+    office_emit("report", "running", "Plugin E packages dual-track reports and UI artifacts.")
+    office_state = build_office_state(
+        finance=finance,
+        network=network,
+        combined_ruleset=combined_ruleset,
+        combined_cards=combined_cards,
+        events=office_events,
+        request_params=getattr(job, "request_params", None),
+    )
+    office_emit("report", "done",
+                f"Office artifacts ready: {len(office_state['artifacts'])} artifacts, "
+                f"{len(office_state['dataSources'])} data sources.")
+    office_emit("chat", "done", "PM F constrained chat context is ready.")
+    office_emit("control", "done", "office_demo backend state is ready.")
+
+    office_state = build_office_state(
+        finance=finance,
+        network=network,
+        combined_ruleset=combined_ruleset,
+        combined_cards=combined_cards,
+        events=office_events,
+        request_params=getattr(job, "request_params", None),
+    )
+    return {
+        "ruleset": combined_ruleset,
+        "cards": combined_cards,
+        "vreport": finance["vreport"],
+        "dual": finance["dual"],
+        "finance": finance,
+        "network": network,
+        "office_state": office_state,
+        "office": office_state,
+        "agents": office_state["agents"],
+        "ruleGroups": office_state["ruleGroups"],
+        "dataSources": office_state["dataSources"],
+        "artifacts": office_state["artifacts"],
+        "workflowEvents": office_state["workflowEvents"],
+    }
+
+
 # 前端 MockSequenceId → (场景, 管线函数)
 SEQUENCE_PIPELINES: dict[str, tuple[str, Callable[..., dict[str, Any]]]] = {
     "learn-finance": ("finance_v1", run_finance_pipeline),
@@ -269,4 +578,8 @@ SEQUENCE_PIPELINES: dict[str, tuple[str, Callable[..., dict[str, Any]]]] = {
     "learn-network": ("network_cidds", run_network_pipeline),
     "validate-network": ("network_cidds", run_network_pipeline),
     "report-network": ("network_cidds", run_network_pipeline),
+    "office-overview": ("office_demo", run_office_demo_pipeline),
+    "learn-office": ("office_demo", run_office_demo_pipeline),
+    "validate-office": ("office_demo", run_office_demo_pipeline),
+    "report-office": ("office_demo", run_office_demo_pipeline),
 }

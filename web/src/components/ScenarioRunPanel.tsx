@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { WorkflowLog } from "./WorkflowLog";
 import {
   workflowPayloadFromLatestDataSource,
@@ -14,6 +14,7 @@ export function ScenarioRunPanel({
   sequence,
   evidence,
   requestPayload,
+  autoRunToken,
   onResult,
 }: {
   title: string;
@@ -22,6 +23,7 @@ export function ScenarioRunPanel({
   sequence: MockSequenceId;
   evidence: string[];
   requestPayload?: WorkflowStartPayload;
+  autoRunToken?: number;
   onResult: (result: WorkflowJobResult, job: WorkflowJobStatus) => void;
 }) {
   const [question, setQuestion] = useState(recommendedQuestion);
@@ -40,6 +42,14 @@ export function ScenarioRunPanel({
     setRunId(Date.now());
     setRunning(true);
   };
+
+  // 一键演示：autoRunToken 自增即「模拟真人点运行实时 A/B 双轨」（问题用默认推荐值，无需输入）
+  useEffect(() => {
+    if (!autoRunToken) return;
+    const t = setTimeout(() => runScenario(), 1000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRunToken]);
 
   return (
     <section className="scenario-run-panel">

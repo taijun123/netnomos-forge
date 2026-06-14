@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { StepRail, type StepDef } from "../components/StepRail";
 import { WorkflowLog } from "../components/WorkflowLog";
 import { RuleCardWall } from "../components/RuleCardWall";
@@ -13,6 +13,10 @@ import {
   FINANCE_SAMPLE_ROWS,
   FINANCE_DATASET_META,
 } from "../mock/finance";
+import { useDemo } from "../demo/DemoContext";
+import { DEMO_PACING, makeAbortableDelay, createGate, awaitGateOr, autoUpload, type Gate } from "../demo/demoDriver";
+import { FINANCE_LEARN_MOCK, FINANCE_VALIDATE_MOCK, FINANCE_DUAL_MOCK } from "../demo/demoMocks";
+import { FINANCE_QUESTION } from "../demo/demoAssets";
 
 const STEPS: StepDef[] = [
   { id: "preview", label: "训练资料预览", hint: "合成财务 960 行" },
@@ -34,6 +38,65 @@ export function FinanceDemoPage() {
   const [dualResult, setDualResult] = useState<WorkflowJobResult | null>(null);
   const [auditSource, setAuditSource] = useState<UploadedDataSource | null>(null);
   const [reportQuestion, setReportQuestion] = useState(FINANCE_SCENARIO_QUESTION);
+
+  // 一键演示：自动驱动整条财务流程
+  const { mode, runToken, setStatus } = useDemo();
+  const [faultToken, setFaultToken] = useState(0);
+  const [dualToken, setDualToken] = useState(0);
+  const gatesRef = useRef<{
+    learn: Gate<WorkflowJobResult>;
+    validate: Gate<WorkflowJobResult>;
+    dual: Gate<WorkflowJobResult>;
+  } | null>(null);
+
+  useEffect(() => {
+    if (mode !== "finance") return;
+    const ac = new AbortController();
+    const delay = makeAbortableDelay(ac.signal);
+    const gates = { learn: createGate<WorkflowJobResult>(), validate: createGate<WorkflowJobResult>(), dual: createGate<WorkflowJobResult>() };
+    gatesRef.current = gates;
+    (async () => {
+      try {
+        setStep("preview");
+        await delay(DEMO_PACING.stepBeat);
+        setStep("learn");
+        const learn = await awaitGateOr(gates.learn, delay, () => FINANCE_LEARN_MOCK);
+        setLiveResult(learn);
+        await delay(DEMO_PACING.afterLearn);
+        setStep("upload");
+        const ds = await autoUpload("finance");
+        setAuditSource(ds);
+        setValidationResult(null);
+        setDualResult(null);
+        await delay(DEMO_PACING.afterUpload);
+        setStep("faults");
+        await delay(DEMO_PACING.beforeValidate);
+        setFaultToken((x) => x + 1); // 触发资料规则核查
+        const val = await awaitGateOr(gates.validate, delay, () => FINANCE_VALIDATE_MOCK);
+        setValidationResult(val);
+        setLiveResult(val);
+        await delay(DEMO_PACING.afterValidate);
+        setStep("question");
+        setReportQuestion(FINANCE_QUESTION);
+        await delay(DEMO_PACING.stepBeat * 1.6);
+        setStep("dual");
+        await delay(DEMO_PACING.beforeDual);
+        setDualToken((x) => x + 1); // 触发 A/B 双轨
+        const dual = await awaitGateOr(gates.dual, delay, () => FINANCE_DUAL_MOCK);
+        setDualResult(dual);
+        setLiveResult(dual);
+        await delay(DEMO_PACING.afterDual);
+        setStep("report");
+        await delay(DEMO_PACING.reportDwell);
+        setStatus("done");
+      } catch {
+        /* AbortError 静默 */
+      }
+    })();
+    return () => ac.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, runToken]);
+
   const ruleCards = useMemo(
     () => mergeRuleCards(liveResult?.cards, liveResult?.rules, []),
     [liveResult]
@@ -58,7 +121,10 @@ export function FinanceDemoPage() {
             <WorkflowLog
               sequence="learn-finance"
               title="规则学习 · 事件流"
-              onResult={(result) => setLiveResult(result)}
+              onResult={(result) => {
+                setLiveResult(result);
+                gatesRef.current?.learn.resolve(result);
+              }}
             />
             {ruleCards.length > 0 ? (
               <RuleCardWall cards={ruleCards} />
@@ -87,6 +153,7 @@ export function FinanceDemoPage() {
               violations={liveViolations}
               isLive={hasLiveValidation}
               sourceLabel={auditSourceLabel}
+              autoStartToken={faultToken}
               requestPayload={{
                 dataSourceId: auditSource.dataSourceId,
                 validationDataSourceId: auditSource.dataSourceId,
@@ -94,6 +161,7 @@ export function FinanceDemoPage() {
               onResult={(result) => {
                 setValidationResult(result);
                 setLiveResult(result);
+                gatesRef.current?.validate.resolve(result);
               }}
               onNext={() => setStep("question")}
             />
@@ -138,9 +206,11 @@ export function FinanceDemoPage() {
                 dataSourceId: auditSource.dataSourceId,
                 validationDataSourceId: auditSource.dataSourceId,
               }}
+              autoRunToken={dualToken}
               onResult={(result) => {
                 setDualResult(result);
                 setLiveResult(result);
+                gatesRef.current?.dual.resolve(result);
               }}
             />
             <DualReport dual={dualResult?.dual} />
@@ -315,6 +385,7 @@ function FaultCards({
   violations,
   isLive,
   sourceLabel,
+  autoStartToken,
   requestPayload,
   onResult,
   onNext,
@@ -322,6 +393,7 @@ function FaultCards({
   violations: Violation[];
   isLive: boolean;
   sourceLabel: string;
+  autoStartToken?: number;
   requestPayload: WorkflowStartPayload;
   onResult: (result: WorkflowJobResult) => void;
   onNext: () => void;
@@ -332,6 +404,14 @@ function FaultCards({
     setRunId(Date.now());
     setRunning(true);
   };
+
+  // 一键演示：autoStartToken 自增即「模拟真人点运行资料规则核查」
+  useEffect(() => {
+    if (!autoStartToken) return;
+    const t = setTimeout(() => startValidation(), 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStartToken]);
 
   return (
     <div className="fault-panel">

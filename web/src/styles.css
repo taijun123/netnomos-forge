@@ -200,6 +200,69 @@ code,
   box-shadow: 0 12px 28px rgba(79, 140, 255, 0.5);
 }
 
+/* ===== 一键演示 悬停选择浮层 ===== */
+.demo-start {
+  position: relative;
+  display: inline-block;
+}
+
+.demo-start-trigger {
+  border: 0;
+  cursor: pointer;
+}
+
+.demo-start-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 240px;
+  padding: 8px;
+  border: 1px solid rgba(120, 150, 200, 0.2);
+  border-radius: 14px;
+  background: rgba(12, 18, 31, 0.97);
+  box-shadow: 0 20px 48px rgba(2, 8, 22, 0.55);
+  backdrop-filter: blur(16px);
+}
+
+.demo-start-menu-title {
+  padding: 4px 10px 6px;
+  color: #93a1bd;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.demo-start-menu button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #eaf0fb;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+
+.demo-start-menu button:hover {
+  background: rgba(79, 140, 255, 0.18);
+}
+
+.demo-start-menu button strong {
+  font-size: 13px;
+}
+
+.demo-start-menu button em {
+  font-style: normal;
+  font-size: 11px;
+  color: #93a1bd;
+}
+
 /* ===== 按钮 ===== */
 .btn {
   display: inline-flex;

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { StepRail, type StepDef } from "../components/StepRail";
 import { WorkflowLog } from "../components/WorkflowLog";
 import { RuleCardWall } from "../components/RuleCardWall";
@@ -9,6 +9,9 @@ import { mergeRuleCards } from "../lib/resultAdapters";
 import type { WorkflowStartPayload } from "../lib/apiClient";
 import type { WorkflowJobResult } from "../lib/events";
 import type { DualReport, Violation } from "../types/api";
+import { useDemo } from "../demo/DemoContext";
+import { DEMO_PACING, makeAbortableDelay, createGate, awaitGateOr, autoUpload, type Gate } from "../demo/demoDriver";
+import { NETWORK_LEARN_MOCK, NETWORK_VALIDATE_MOCK, NETWORK_DUAL_MOCK } from "../demo/demoMocks";
 
 interface NetFlowRow {
   no: number;
@@ -45,6 +48,62 @@ export function NetworkDemoPage() {
   const [validationResult, setValidationResult] = useState<WorkflowJobResult | null>(null);
   const [dualResult, setDualResult] = useState<WorkflowJobResult | null>(null);
   const [validationSource, setValidationSource] = useState<UploadedDataSource | null>(null);
+
+  // 一键演示：自动驱动整条网络流程
+  const { mode, runToken, setStatus } = useDemo();
+  const [validateToken, setValidateToken] = useState(0);
+  const [dualToken, setDualToken] = useState(0);
+  const gatesRef = useRef<{
+    learn: Gate<WorkflowJobResult>;
+    validate: Gate<WorkflowJobResult>;
+    dual: Gate<WorkflowJobResult>;
+  } | null>(null);
+
+  useEffect(() => {
+    if (mode !== "network") return;
+    const ac = new AbortController();
+    const delay = makeAbortableDelay(ac.signal);
+    const gates = { learn: createGate<WorkflowJobResult>(), validate: createGate<WorkflowJobResult>(), dual: createGate<WorkflowJobResult>() };
+    gatesRef.current = gates;
+    (async () => {
+      try {
+        setStep("upload");
+        await delay(DEMO_PACING.stepBeat);
+        setStep("learn"); // WorkflowLog 挂载即自动跑
+        const learn = await awaitGateOr(gates.learn, delay, () => NETWORK_LEARN_MOCK);
+        setLiveResult(learn);
+        await delay(DEMO_PACING.afterLearn);
+        setStep("cards");
+        await delay(DEMO_PACING.stepBeat * 1.8);
+        setStep("validate");
+        const ds = await autoUpload("network");
+        setValidationSource(ds);
+        setValidationResult(null);
+        setDualResult(null);
+        await delay(DEMO_PACING.beforeValidate);
+        setValidateToken((x) => x + 1); // 触发新资料核查
+        const val = await awaitGateOr(gates.validate, delay, () => NETWORK_VALIDATE_MOCK);
+        setValidationResult(val);
+        setLiveResult(val);
+        await delay(DEMO_PACING.afterValidate);
+        setStep("dual");
+        await delay(DEMO_PACING.beforeDual);
+        setDualToken((x) => x + 1); // 触发双轨
+        const dual = await awaitGateOr(gates.dual, delay, () => NETWORK_DUAL_MOCK);
+        setDualResult(dual);
+        setLiveResult(dual);
+        await delay(DEMO_PACING.afterDual);
+        setStep("report");
+        await delay(DEMO_PACING.reportDwell);
+        setStatus("done");
+      } catch {
+        /* AbortError：被新一轮或离开页面中止，静默 */
+      }
+    })();
+    return () => ac.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, runToken]);
+
   const ruleCards = useMemo(
     () => mergeRuleCards(liveResult?.cards, liveResult?.rules, []),
     [liveResult]
@@ -68,7 +127,10 @@ export function NetworkDemoPage() {
           <WorkflowLog
             sequence="learn-network"
             title="规则学习 · 事件流"
-            onResult={(result) => setLiveResult(result)}
+            onResult={(result) => {
+              setLiveResult(result);
+              gatesRef.current?.learn.resolve(result);
+            }}
           />
         )}
         {step === "cards" && (
@@ -79,6 +141,7 @@ export function NetworkDemoPage() {
         {step === "validate" && (
           <NetworkValidationStep
             uploaded={validationSource}
+            autoStartToken={validateToken}
             onUploaded={(source) => {
               setValidationSource(source);
               setValidationResult(null);
@@ -97,6 +160,7 @@ export function NetworkDemoPage() {
             onResult={(result) => {
               setValidationResult(result);
               setLiveResult(result);
+              gatesRef.current?.validate.resolve(result);
             }}
           />
         )}
@@ -119,9 +183,11 @@ export function NetworkDemoPage() {
                 dataSourceId: validationSource.dataSourceId,
                 validationDataSourceId: validationSource.dataSourceId,
               }}
+              autoRunToken={dualToken}
               onResult={(result) => {
                 setDualResult(result);
                 setLiveResult(result);
+                gatesRef.current?.dual.resolve(result);
               }}
             />
             <DualTrackFlows dual={dualResult?.dual} />
@@ -222,6 +288,7 @@ function UploadStep({ onNext }: { onNext: () => void }) {
 
 function NetworkValidationStep({
   uploaded,
+  autoStartToken,
   onUploaded,
   requestPayload,
   violations,
@@ -229,6 +296,7 @@ function NetworkValidationStep({
   onResult,
 }: {
   uploaded: UploadedDataSource | null;
+  autoStartToken?: number;
   onUploaded: (dataSource: UploadedDataSource) => void;
   requestPayload: WorkflowStartPayload;
   violations: Violation[];
@@ -242,6 +310,14 @@ function NetworkValidationStep({
     setRunId(Date.now());
     setRunning(true);
   };
+
+  // 一键演示：autoStartToken 自增即「模拟真人点运行新资料核查」
+  useEffect(() => {
+    if (!autoStartToken || !uploaded) return;
+    const t = setTimeout(() => startValidation(), 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStartToken]);
 
   return (
     <div className="validation-step">

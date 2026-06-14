@@ -8,7 +8,7 @@
  */
 
 // === 场景（对应 contracts.Scenario）===
-export type Scenario = "network_cidds" | "network_pcap" | "finance_v1";
+export type Scenario = "network_cidds" | "network_pcap" | "finance_v1" | "office_demo";
 
 // === 规则来源（对应 contracts.RuleSource）===
 export type RuleSource = "learned" | "manual";

@@ -29,7 +29,12 @@ from forge.contracts import (
     API_RULESETS_UPLOAD,
     API_WORKFLOW_EVENTS,
 )
-from server.pipeline import SEQUENCE_PIPELINES, run_finance_pipeline, run_network_pipeline
+from server.pipeline import (
+    SEQUENCE_PIPELINES,
+    run_finance_pipeline,
+    run_network_pipeline,
+    run_office_demo_pipeline,
+)
 from server.store import JOB_DONE, JOB_FAILED, get_store
 
 log = logging.getLogger("server.app")
@@ -44,6 +49,7 @@ _SCENARIO_PIPELINES = {
     "finance_v1": run_finance_pipeline,
     "network_cidds": run_network_pipeline,
     "network_pcap": run_network_pipeline,
+    "office_demo": run_office_demo_pipeline,
 }
 LEARN_REQUEST_FIELDS = (
     "dataSourceId",
@@ -86,15 +92,26 @@ def _start_job(
                 violations = [asdict(v) for v in dual.track_a.violations]
             ruleset = result.get("ruleset")
             request_snapshot = dict(job.request_params)
-            store.finish_job(job.job_id, {
+            office_state = result.get("office_state")
+            if office_state is not None:
+                store.last_office_state = office_state
+            job_result = {
                 "ruleset_id": ruleset_id,
                 "dual": asdict(dual) if dual is not None else None,
                 "cards": [asdict(c) for c in (result.get("cards") or [])],
                 "rules": [asdict(r) for r in getattr(ruleset, "rules", [])],
                 "violations": violations,
+                "office": result.get("office"),
+                "office_state": office_state,
+                "agents": result.get("agents"),
+                "ruleGroups": result.get("ruleGroups"),
+                "dataSources": result.get("dataSources"),
+                "artifacts": result.get("artifacts"),
+                "workflowEvents": result.get("workflowEvents"),
                 "request": request_snapshot,
                 "requestParams": request_snapshot,
-            })
+            }
+            store.finish_job(job.job_id, job_result)
         except Exception as exc:
             log.exception("管线失败：%s", exc)
             store.fail_job(job.job_id, str(exc))
@@ -268,6 +285,21 @@ def create_app():
         except Exception as exc:
             store.fail_job(job.job_id, str(exc))
             raise HTTPException(500, f"报告生成失败：{exc}") from exc
+        if scenario == "office_demo":
+            office_state = result.get("office_state")
+            if office_state is not None:
+                store.last_office_state = office_state
+            payload = {
+                "office": result.get("office"),
+                "office_state": office_state,
+                "agents": result.get("agents"),
+                "ruleGroups": result.get("ruleGroups"),
+                "dataSources": result.get("dataSources"),
+                "artifacts": result.get("artifacts"),
+                "workflowEvents": result.get("workflowEvents"),
+            }
+            store.finish_job(job.job_id, payload)
+            return {"jobId": job.job_id, **payload}
         dual = result["dual"]
         store.last_dual[scenario] = dual
         store.finish_job(job.job_id, {"dual": asdict(dual)})
@@ -353,6 +385,21 @@ def create_app():
             payload = {}
         message = str(payload.get("message", ""))
         scenario = payload.get("scenario", "finance_v1")
+        if scenario == "office_demo":
+            from forge.scenarios.office_demo import summarize_office_chat  # noqa: PLC0415
+            chat = summarize_office_chat(message, store.last_office_state)
+            content = chat["content"]
+            return {
+                "messageId": uuid.uuid4().hex[:12],
+                "content": content,
+                "reply": content,
+                "constrained": True,
+                "matchedRules": chat["matchedRules"],
+                "citations": chat["citations"],
+                "flagged_numbers": [],
+                "checks": ["office_demo response grounded in cached backend state"],
+                "backend": "office_demo",
+            }
         llm = _make_llm()
         system = ("你是财务合规助理。回答问题时引用的数值必须可溯源；"
                   "不确定的数字请不要编造。")
