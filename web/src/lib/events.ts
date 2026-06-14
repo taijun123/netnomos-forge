@@ -103,11 +103,19 @@ export function subscribeWorkflow(
 
   const connectLive = async () => {
     try {
+<<<<<<< HEAD
       logger.sseConnection("connecting", { sequence, payload });
       const jobId = await startWorkflowJob(sequence, payload);
       if (closed) return;
       liveJobId = jobId;
       logger.workflow(sequence, "started", `job ${jobId}`);
+=======
+      logger.sseConnection('connecting', undefined);
+      const jobId = await startWorkflowJob(sequence, payload);
+      if (closed) return;
+      liveJobId = jobId;
+      logger.sseConnection('connected', undefined);
+>>>>>>> origin/Jack
       sub.onMode?.("live");
       sub.onJobStart?.(jobId);
       void pollJob(jobId);
@@ -118,14 +126,25 @@ export function subscribeWorkflow(
       }
 
       const url = workflowEventsUrl(jobId);
+<<<<<<< HEAD
       source = new EventSource(url);
       logger.sseConnection("connected", url);
+=======
+      // In development, if using proxy, SSE needs full URL
+      // Use 127.0.0.1 instead of localhost to avoid IPv6 issues
+      const sseUrl = url.startsWith('/') ? `http://127.0.0.1:8000${url}` : url;
+      source = new EventSource(sseUrl);
+>>>>>>> origin/Jack
       let gotFirst = false;
 
       handshakeTimer = setTimeout(() => {
         if (!gotFirst && !closed) {
           // SSE 首包慢时保留 job 轮询，避免代理/浏览器缓冲导致 UI 卡住。
+<<<<<<< HEAD
           logger.warn("SSE handshake timeout; polling remains active");
+=======
+          logger.warn('SSE handshake timeout, falling back to polling');
+>>>>>>> origin/Jack
           source?.close();
           source = null;
         }
@@ -140,10 +159,17 @@ export function subscribeWorkflow(
         sub.onMode?.("live");
         try {
           const ev = JSON.parse(raw.data) as WorkflowEvent;
+<<<<<<< HEAD
           logger.sseEvent("workflow", ev);
           emitEvent(ev);
         } catch (err) {
           logger.error("Failed to parse workflow SSE event", err);
+=======
+          logger.sseEvent('workflow', ev);
+          emitEvent(ev);
+        } catch (err) {
+          logger.error('Failed to parse SSE event', err);
+>>>>>>> origin/Jack
           sub.onError?.(err);
         }
       };
@@ -161,10 +187,17 @@ export function subscribeWorkflow(
           const jobId = payload.jobId ?? payload.job_id;
           if (!jobId) return;
           liveJobId = jobId;
+<<<<<<< HEAD
           logger.sseEvent("job", { jobId });
           sub.onJobStart?.(jobId);
         } catch (err) {
           logger.error("Failed to parse job SSE event", err);
+=======
+          logger.sseEvent('job', { jobId });
+          sub.onJobStart?.(jobId);
+        } catch (err) {
+          logger.error('Failed to parse job event', err);
+>>>>>>> origin/Jack
           sub.onError?.(err);
         }
       }) as EventListener);
@@ -172,7 +205,11 @@ export function subscribeWorkflow(
       source.onmessage = handleMessage;
 
       source.onerror = (err) => {
+<<<<<<< HEAD
         logger.sseConnection("error", err);
+=======
+        logger.error('SSE connection error', err);
+>>>>>>> origin/Jack
         if (closed) return;
         if (!gotFirst) {
           if (handshakeTimer) {
@@ -184,14 +221,22 @@ export function subscribeWorkflow(
           if (!liveJobId) sub.onError?.(err);
       } else {
         // 后端完成后会关闭 SSE；浏览器通常以 error 事件告知关闭。
+<<<<<<< HEAD
         logger.sseConnection("disconnected", { jobId: liveJobId });
+=======
+        logger.sseConnection('disconnected', undefined);
+>>>>>>> origin/Jack
         source?.close();
         source = null;
           if (liveJobId) void pollJob(liveJobId);
       }
       };
     } catch (err) {
+<<<<<<< HEAD
       logger.error("Failed to start live workflow subscription", err);
+=======
+      logger.error('Failed to connect to SSE', err);
+>>>>>>> origin/Jack
       sub.onError?.(err);
     }
   };
@@ -200,7 +245,11 @@ export function subscribeWorkflow(
 
   return {
     close: () => {
+<<<<<<< HEAD
       logger.sseConnection("disconnected", { sequence });
+=======
+      logger.sseConnection('disconnected', undefined);
+>>>>>>> origin/Jack
       closed = true;
       if (handshakeTimer) clearTimeout(handshakeTimer);
       if (pollTimer) clearInterval(pollTimer);

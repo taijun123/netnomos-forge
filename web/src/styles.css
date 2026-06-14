@@ -1087,6 +1087,47 @@ code,
   margin: 18px 0 22px;
 }
 
+/* Upload step tabs */
+.upload-options {
+  margin-bottom: 20px;
+}
+
+.upload-option-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+}
+
+.upload-tab {
+  padding: 8px 16px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.upload-tab:hover {
+  background: rgba(79, 140, 255, 0.1);
+  color: var(--text);
+}
+
+.upload-tab.active {
+  background: rgba(79, 140, 255, 0.15);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.upload-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;

@@ -1,7 +1,11 @@
 import { API } from "../types/api";
 import type { DualReport, Rule, RuleCard, Scenario, Violation, WorkflowEvent } from "../types/api";
 import type { MockSequenceId } from "../mock/sse";
+<<<<<<< HEAD
 import { logger, wasLogged } from "./logger";
+=======
+import { logger } from "./logger";
+>>>>>>> origin/Jack
 
 export interface WorkflowJobResult {
   ruleset_id?: string;
@@ -114,6 +118,7 @@ export function workflowPayloadFromLatestDataSource(
       };
 }
 
+<<<<<<< HEAD
 function summarizeBody(body: BodyInit | null | undefined): unknown {
   if (!body) return undefined;
   if (typeof FormData !== "undefined" && body instanceof FormData) {
@@ -166,6 +171,31 @@ async function readJson<T>(
   } catch (error) {
     logger.apiError(meta.method, meta.url, error, duration);
     throw error;
+=======
+async function readJson<T>(res: Response): Promise<T> {
+  const startTime = performance.now();
+  const url = res.url;
+
+  try {
+    const text = await res.text();
+    const duration = performance.now() - startTime;
+
+    if (!res.ok) {
+      const detail = text ? `: ${text.slice(0, 180)}` : "";
+      const error = new Error(`API ${res.status}${detail}`);
+      logger.apiError('UNKNOWN', url || res.url, error);
+      throw error;
+    }
+
+    const data = (text ? JSON.parse(text) : {}) as T;
+    logger.apiResponse('UNKNOWN', url || res.url, res.status, Math.round(duration));
+    return data;
+  } catch (err) {
+    if (err instanceof Error) {
+      logger.apiError('UNKNOWN', url || res.url, err);
+    }
+    throw err;
+>>>>>>> origin/Jack
   }
 }
 

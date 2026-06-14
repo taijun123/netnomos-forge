@@ -1,14 +1,21 @@
+<<<<<<< HEAD
 import { useDemo } from "../demo/DemoContext";
 import { DemoStartMenu } from "../demo/DemoStartMenu";
 
 export type Route = "intro" | "network" | "finance" | "office" | "workspace" | "log-demo";
+=======
+export type Route = "intro" | "network" | "finance" | "office" | "log-demo";
+>>>>>>> origin/Jack
 
 const ITEMS: Array<{ id: Route; label: string }> = [
   { id: "intro", label: "介绍" },
   { id: "network", label: "网络 demo" },
   { id: "finance", label: "财务 demo" },
   { id: "office", label: "3D 办公室" },
+<<<<<<< HEAD
   { id: "workspace", label: "工作台" },
+=======
+>>>>>>> origin/Jack
   { id: "log-demo", label: "日志演示" },
 ];
 

@@ -47,6 +47,7 @@ export function NetworkDemoPage() {
   const [validationResult, setValidationResult] = useState<WorkflowJobResult | null>(null);
   const [dualResult, setDualResult] = useState<WorkflowJobResult | null>(null);
   const [validationSource, setValidationSource] = useState<UploadedDataSource | null>(null);
+<<<<<<< HEAD
   const [demoError, setDemoError] = useState<string | null>(null);
 
   // 一键演示：自动驱动整条网络流程
@@ -107,6 +108,10 @@ export function NetworkDemoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, runToken]);
 
+=======
+  const [learningSource, setLearningSource] = useState<UploadedDataSource | null>(null);
+  const [useBuiltIn, setUseBuiltIn] = useState<boolean>(true);
+>>>>>>> origin/Jack
   const ruleCards = useMemo(
     () => mergeRuleCards(liveResult?.cards, liveResult?.rules, []),
     [liveResult]
@@ -125,27 +130,56 @@ export function NetworkDemoPage() {
       <div className="demo-stage">
         <DemoHeader />
         <LiveResultBanner result={liveResult} />
+<<<<<<< HEAD
         {demoError && (
           <div className="workflow-error">
             一键演示已停止，未使用本地模拟结果：{demoError}
           </div>
         )}
         {step === "upload" && <UploadStep onNext={() => setStep("learn")} />}
+=======
+        {step === "upload" && (
+          <UploadStep
+            useBuiltIn={useBuiltIn}
+            learningSource={learningSource}
+            onUseBuiltInChange={setUseBuiltIn}
+            onLearningSourceChange={setLearningSource}
+            onClear={() => {
+              setLearningSource(null);
+              setLiveResult(null);
+              setValidationResult(null);
+              setDualResult(null);
+            }}
+            onNext={() => setStep("learn")}
+          />
+        )}
+>>>>>>> origin/Jack
         {step === "learn" && (
           <WorkflowLog
             sequence="learn-network"
             title="规则学习 · 事件流"
+<<<<<<< HEAD
             onResult={(result) => {
               setLiveResult(result);
               gatesRef.current?.learn.resolve(result);
             }}
             onError={(err) => gatesRef.current?.learn.reject(err)}
+=======
+            requestPayload={
+              useBuiltIn
+                ? {}
+                : learningSource
+                  ? { dataSourceId: learningSource.dataSourceId }
+                  : {}
+            }
+            onResult={(result) => setLiveResult(result)}
+>>>>>>> origin/Jack
           />
         )}
         {step === "cards" && (
           ruleCards.length > 0
             ? <RuleCardWall cards={ruleCards} />
-            : <EmptyLiveState title="还没有真实规则卡" detail="请先运行“规则学习”。后端返回 cards/rules 后，这里才会展示规则卡墙。" />
+            : <EmptyLiveState title="还没有真实规则卡" detail="请先运行「规则学习」。后端返回 cards/rules 后，这里才会展示规则卡墙。" />
         )}
         {step === "validate" && (
           <NetworkValidationStep
@@ -206,7 +240,7 @@ export function NetworkDemoPage() {
           ) : (
             <EmptyLiveState
               title={!validationSource ? "请先上传待核查网络资料" : "请先运行新资料核查"}
-              detail="双轨对比必须绑定“新资料核查”步骤上传的文件，并完成一次核查 job；未核查时不会运行或展示 A/B 表。"
+              detail="双轨对比必须绑定「新资料核查」步骤上传的文件，并完成一次核查 job；未核查时不会运行或展示 A/B 表。"
             />
           )
         )}
@@ -269,34 +303,87 @@ function EmptyLiveState({ title, detail }: { title: string; detail: string }) {
   );
 }
 
-function UploadStep({ onNext }: { onNext: () => void }) {
+function UploadStep({
+  useBuiltIn,
+  learningSource,
+  onUseBuiltInChange,
+  onLearningSourceChange,
+  onClear,
+  onNext,
+}: {
+  useBuiltIn: boolean;
+  learningSource: UploadedDataSource | null;
+  onUseBuiltInChange: (useBuiltIn: boolean) => void;
+  onLearningSourceChange: (source: UploadedDataSource) => void;
+  onClear: () => void;
+  onNext: () => void;
+}) {
   return (
     <div className="upload-step glass">
-      <div className="upload-drop">
-        <span className="upload-icon">⇪</span>
-        <strong>cidds_wk2_normal_10k.csv</strong>
-        <em>10,000 行正常 NetFlow · 已加载（演示数据）</em>
-      </div>
-      <div className="upload-meta">
-        <div>
-          <span>记录数</span>
-          <strong>10,000</strong>
-        </div>
-        <div>
-          <span>字段</span>
-          <strong>Proto / SrcPt / Packets / Bytes / Flags …</strong>
-        </div>
-        <div>
-          <span>用途</span>
-          <strong>规则自发现训练集</strong>
+      <div className="upload-options">
+        <div className="upload-option-tabs">
+          <button
+            className={`upload-tab ${useBuiltIn ? 'active' : ''}`}
+            onClick={() => onUseBuiltInChange(true)}
+          >
+            使用内置数据
+          </button>
+          <button
+            className={`upload-tab ${!useBuiltIn ? 'active' : ''}`}
+            onClick={() => onUseBuiltInChange(false)}
+          >
+            上传自定义数据
+          </button>
         </div>
       </div>
-      <p className="upload-note">
-        规则学习使用内置正常流量；复用核查阶段请在“新资料核查”步骤手工上传待核查流量文件。
-      </p>
-      <button className="btn btn-primary" onClick={onNext}>
-        开始规则学习 →
-      </button>
+
+      {useBuiltIn ? (
+        <>
+          <div className="upload-drop">
+            <span className="upload-icon">⇪</span>
+            <strong>cidds_wk2_normal_10k.csv</strong>
+            <em>10,000 行正常 NetFlow · 已加载（演示数据）</em>
+          </div>
+          <div className="upload-meta">
+            <div>
+              <span>记录数</span>
+              <strong>10,000</strong>
+            </div>
+            <div>
+              <span>字段</span>
+              <strong>Proto / SrcPt / Packets / Bytes / Flags …</strong>
+            </div>
+            <div>
+              <span>用途</span>
+              <strong>规则自发现训练集</strong>
+            </div>
+          </div>
+          <p className="upload-note">
+            规则学习使用内置正常流量；复用核查阶段请在"新资料核查"步骤手工上传待核查流量文件。
+          </p>
+        </>
+      ) : (
+        <DataSourceUploadBox
+          scenario="network_cidds"
+          title="选择规则学习数据"
+          description="上传用于规则学习的 NetFlow 数据文件（CSV、JSON、TXT 格式）。系统将从此数据中自动发现和提取规则。"
+          accept=".csv,.json,.txt"
+          note="network-learning-data"
+          uploaded={learningSource}
+          onUploaded={onLearningSourceChange}
+        />
+      )}
+
+      <div className="upload-actions">
+        <button className="btn btn-primary" onClick={onNext}>
+          开始规则学习 →
+        </button>
+        {(learningSource || !useBuiltIn) && (
+          <button className="btn btn-outline" onClick={onClear}>
+            清空数据
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -372,7 +459,7 @@ function NetworkValidationStep({
       {uploaded && !hasValidationResult && (
         <EmptyLiveState
           title="还没有核查结果"
-          detail="资料已上传，但还没有执行核查。点击“运行新资料核查”后，后端 job 会带着 dataSourceId 与 validationDataSourceId 返回违规清单。"
+          detail="资料已上传，但还没有执行核查。点击「运行新资料核查」后，后端 job 会带着 dataSourceId 与 validationDataSourceId 返回违规清单。"
         />
       )}
       {uploaded && hasValidationResult && violations.length > 0 && (
@@ -549,7 +636,7 @@ function DualTrackFlows({ dual }: { dual?: DualReport | null }) {
     return (
       <EmptyLiveState
         title="还没有真实双轨结果"
-        detail="点击上方“运行实时 A/B 双轨”，等后端 job 完成后再展示 A/B NetFlow。"
+        detail="点击上方「运行实时 A/B 双轨」，等后端 job 完成后再展示 A/B NetFlow。"
       />
     );
   }

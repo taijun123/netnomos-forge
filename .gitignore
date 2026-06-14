@@ -45,7 +45,7 @@ docs/*_render_test.*
 **/training_args.bin
 forge/rulesets/*/20*/
 forge/rulesets/*/generated*.csv
-forge/rulesets/*/sample_b.json
+# forge/rulesets/*/sample_b.json  # 系统运行必需文件，v1.1.0版本需要提交
 
 # Raw local data drops
 data/*.csv
