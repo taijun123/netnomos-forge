@@ -1,6 +1,7 @@
 import { API } from "../types/api";
 import type { DualReport, Rule, RuleCard, Scenario, Violation, WorkflowEvent } from "../types/api";
 import type { MockSequenceId } from "../mock/sse";
+import { logger, wasLogged } from "./logger";
 
 export interface WorkflowJobResult {
   ruleset_id?: string;
@@ -113,20 +114,66 @@ export function workflowPayloadFromLatestDataSource(
       };
 }
 
-async function readJson<T>(res: Response): Promise<T> {
+function summarizeBody(body: BodyInit | null | undefined): unknown {
+  if (!body) return undefined;
+  if (typeof FormData !== "undefined" && body instanceof FormData) {
+    const fields: string[] = [];
+    body.forEach((_value, key) => fields.push(key));
+    return { formFields: fields };
+  }
+  if (typeof body === "string") {
+    try {
+      return JSON.parse(body);
+    } catch {
+      return body.slice(0, 500);
+    }
+  }
+  return { bodyType: Object.prototype.toString.call(body) };
+}
+
+async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const method = (init.method ?? "GET").toUpperCase();
+  const url = apiUrl(path);
+  const startedAt = performance.now();
+  logger.apiRequest(method, url, summarizeBody(init.body));
+  try {
+    const res = await fetch(url, init);
+    return await readJson<T>(res, { method, url, startedAt });
+  } catch (error) {
+    if (!wasLogged(error)) {
+      logger.apiError(method, url, error, Math.round(performance.now() - startedAt));
+    }
+    throw error;
+  }
+}
+
+async function readJson<T>(
+  res: Response,
+  meta: { method: string; url: string; startedAt: number }
+): Promise<T> {
   const text = await res.text();
+  const duration = Math.round(performance.now() - meta.startedAt);
   if (!res.ok) {
     const detail = text ? `: ${text.slice(0, 180)}` : "";
-    throw new Error(`API ${res.status}${detail}`);
+    const error = new Error(`API ${res.status}${detail}`);
+    logger.apiError(meta.method, meta.url, error, duration);
+    throw error;
   }
-  return (text ? JSON.parse(text) : {}) as T;
+  try {
+    const data = (text ? JSON.parse(text) : {}) as T;
+    logger.apiResponse(meta.method, meta.url, res.status, duration);
+    return data;
+  } catch (error) {
+    logger.apiError(meta.method, meta.url, error, duration);
+    throw error;
+  }
 }
 
 export async function startWorkflowJob(
   sequence: MockSequenceId,
   requestPayload: WorkflowStartPayload = {}
 ): Promise<string> {
-  const res = await fetch(apiUrl(API.RULESETS_LEARN), {
+  const responsePayload = await requestJson<{ jobId?: string; job_id?: string }>(API.RULESETS_LEARN, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -135,7 +182,6 @@ export async function startWorkflowJob(
       ...compactWorkflowPayload(requestPayload),
     }),
   });
-  const responsePayload = await readJson<{ jobId?: string; job_id?: string }>(res);
   const jobId = responsePayload.jobId ?? responsePayload.job_id;
   if (!jobId) throw new Error("start workflow returned no job id");
   return jobId;
@@ -150,11 +196,10 @@ export async function uploadDataSource(
   form.append("scenario", scenario);
   form.append("note", note);
   form.append("file", file, file.name);
-  const res = await fetch(apiUrl(API.DATA_SOURCES), {
+  const raw = await requestJson<Partial<DataSourceUploadResult>>(API.DATA_SOURCES, {
     method: "POST",
     body: form,
   });
-  const raw = await readJson<Partial<DataSourceUploadResult>>(res);
   const dataSourceId = raw.dataSourceId;
   if (!dataSourceId) throw new Error("upload data source returned no dataSourceId");
   const result: DataSourceUploadResult = {
@@ -173,12 +218,11 @@ export async function uploadDataSource(
 }
 
 export async function uploadOfficeRuleset(): Promise<RuleSetUploadResult> {
-  const res = await fetch(apiUrl(API.RULESETS_UPLOAD), {
+  const raw = await requestJson<Partial<RuleSetUploadResult>>(API.RULESETS_UPLOAD, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ scenario: "office_demo" satisfies Scenario }),
   });
-  const raw = await readJson<Partial<RuleSetUploadResult>>(res);
   const rulesetId = raw.rulesetId;
   if (!rulesetId) throw new Error("upload ruleset returned no rulesetId");
   return { rulesetId, ruleCount: raw.ruleCount ?? 0 };
@@ -195,12 +239,11 @@ export async function registerOfficeDemoDataSource(
   filename = "demo-pcap-csv-source.csv",
   note = "office demo registered data source"
 ): Promise<DataSourceUploadResult> {
-  const res = await fetch(apiUrl(API.DATA_SOURCES), {
+  const raw = await requestJson<Partial<DataSourceUploadResult>>(API.DATA_SOURCES, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ scenario: "office_demo" satisfies Scenario, filename, note }),
   });
-  const raw = await readJson<Partial<DataSourceUploadResult>>(res);
   const dataSourceId = raw.dataSourceId;
   if (!dataSourceId) throw new Error("register data source returned no dataSourceId");
   return {
@@ -214,7 +257,7 @@ export async function registerOfficeDemoDataSource(
 export async function startOfficeWorkflow(
   requestPayload: WorkflowStartPayload = {}
 ): Promise<string> {
-  const res = await fetch(apiUrl(API.RULESETS_LEARN), {
+  const responsePayload = await requestJson<{ jobId?: string; job_id?: string }>(API.RULESETS_LEARN, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -223,7 +266,6 @@ export async function startOfficeWorkflow(
       ...compactWorkflowPayload(requestPayload),
     }),
   });
-  const responsePayload = await readJson<{ jobId?: string; job_id?: string }>(res);
   const jobId = responsePayload.jobId ?? responsePayload.job_id;
   if (!jobId) throw new Error("start office workflow returned no job id");
   return jobId;
@@ -236,7 +278,7 @@ export async function sendConstrainedChatMessage(payload: {
   systemPrompt?: string;
   ragFiles?: string[];
 }): Promise<ConstrainedChatResult> {
-  const res = await fetch(apiUrl(API.CHAT_CONSTRAINED), {
+  return requestJson<ConstrainedChatResult>(API.CHAT_CONSTRAINED, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -248,12 +290,10 @@ export async function sendConstrainedChatMessage(payload: {
       ragFiles: payload.ragFiles ?? [],
     }),
   });
-  return readJson<ConstrainedChatResult>(res);
 }
 
 export async function fetchWorkflowJob(jobId: string): Promise<WorkflowJobStatus> {
-  const res = await fetch(apiUrl(`/api/jobs/${encodeURIComponent(jobId)}`));
-  return normalizeJob(await readJson<WorkflowJobStatus>(res));
+  return normalizeJob(await requestJson<WorkflowJobStatus>(`/api/jobs/${encodeURIComponent(jobId)}`));
 }
 
 export async function waitForWorkflowJob(

@@ -19,6 +19,7 @@ import { fetchWorkflowJob, startWorkflowJob, workflowEventsUrl } from "./apiClie
 import type { WorkflowJobStatus, WorkflowStartPayload } from "./apiClient";
 export type { WorkflowJobResult, WorkflowJobStatus, WorkflowStartPayload } from "./apiClient";
 import type { MockSequenceId } from "../mock/sse";
+import { logger } from "./logger";
 
 export type StreamMode = "live" | "mock";
 
@@ -83,10 +84,14 @@ export function subscribeWorkflow(
       sub.onMode?.("live");
       job.events.forEach(emitEvent);
       if (job.status === "done" || job.status === "failed") {
+        logger.workflow(sequence, job.status, `job ${jobId} finished`);
         finishLive(job);
       }
     } catch (err) {
-      if (!closed) sub.onError?.(err);
+      if (!closed) {
+        logger.error("Workflow polling failed", err);
+        sub.onError?.(err);
+      }
     }
   };
 
@@ -98,9 +103,11 @@ export function subscribeWorkflow(
 
   const connectLive = async () => {
     try {
+      logger.sseConnection("connecting", { sequence, payload });
       const jobId = await startWorkflowJob(sequence, payload);
       if (closed) return;
       liveJobId = jobId;
+      logger.workflow(sequence, "started", `job ${jobId}`);
       sub.onMode?.("live");
       sub.onJobStart?.(jobId);
       void pollJob(jobId);
@@ -112,11 +119,13 @@ export function subscribeWorkflow(
 
       const url = workflowEventsUrl(jobId);
       source = new EventSource(url);
+      logger.sseConnection("connected", url);
       let gotFirst = false;
 
       handshakeTimer = setTimeout(() => {
         if (!gotFirst && !closed) {
           // SSE 首包慢时保留 job 轮询，避免代理/浏览器缓冲导致 UI 卡住。
+          logger.warn("SSE handshake timeout; polling remains active");
           source?.close();
           source = null;
         }
@@ -131,8 +140,10 @@ export function subscribeWorkflow(
         sub.onMode?.("live");
         try {
           const ev = JSON.parse(raw.data) as WorkflowEvent;
+          logger.sseEvent("workflow", ev);
           emitEvent(ev);
         } catch (err) {
+          logger.error("Failed to parse workflow SSE event", err);
           sub.onError?.(err);
         }
       };
@@ -150,8 +161,10 @@ export function subscribeWorkflow(
           const jobId = payload.jobId ?? payload.job_id;
           if (!jobId) return;
           liveJobId = jobId;
+          logger.sseEvent("job", { jobId });
           sub.onJobStart?.(jobId);
         } catch (err) {
+          logger.error("Failed to parse job SSE event", err);
           sub.onError?.(err);
         }
       }) as EventListener);
@@ -159,6 +172,7 @@ export function subscribeWorkflow(
       source.onmessage = handleMessage;
 
       source.onerror = (err) => {
+        logger.sseConnection("error", err);
         if (closed) return;
         if (!gotFirst) {
           if (handshakeTimer) {
@@ -170,12 +184,14 @@ export function subscribeWorkflow(
           if (!liveJobId) sub.onError?.(err);
       } else {
         // 后端完成后会关闭 SSE；浏览器通常以 error 事件告知关闭。
+        logger.sseConnection("disconnected", { jobId: liveJobId });
         source?.close();
         source = null;
           if (liveJobId) void pollJob(liveJobId);
       }
       };
     } catch (err) {
+      logger.error("Failed to start live workflow subscription", err);
       sub.onError?.(err);
     }
   };
@@ -184,6 +200,7 @@ export function subscribeWorkflow(
 
   return {
     close: () => {
+      logger.sseConnection("disconnected", { sequence });
       closed = true;
       if (handshakeTimer) clearTimeout(handshakeTimer);
       if (pollTimer) clearInterval(pollTimer);

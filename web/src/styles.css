@@ -6071,3 +6071,340 @@ code,
     justify-content: flex-start;
   }
 }
+
+.log-panel-toggle {
+  right: 18px;
+  bottom: 18px;
+  z-index: 80;
+  min-width: 88px;
+  padding: 9px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: linear-gradient(135deg, #39d9ff, #6f7cff);
+  color: #06101e;
+  font-weight: 850;
+  box-shadow: 0 18px 38px rgba(57, 217, 255, 0.22);
+}
+
+.log-panel-dock {
+  right: 18px;
+  bottom: 66px;
+  z-index: 79;
+  width: min(460px, calc(100vw - 32px));
+  max-height: min(620px, calc(100vh - 94px));
+  overflow: hidden;
+  border-radius: 12px;
+  background: rgba(8, 10, 31, 0.94);
+  box-shadow: 0 28px 72px rgba(0, 0, 0, 0.48);
+  backdrop-filter: blur(18px);
+}
+
+.log-panel {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  max-height: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  color: #f5f7ff;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(75, 217, 255, 0.16), transparent 34%),
+    radial-gradient(circle at 100% 0%, rgba(124, 58, 237, 0.16), transparent 38%),
+    rgba(10, 15, 44, 0.94);
+}
+
+.log-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.log-panel-head > div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+}
+
+.log-panel-head span,
+.log-demo-card > span {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: rgba(57, 217, 255, 0.12);
+  color: #4dd9ff;
+}
+
+.log-panel-head strong {
+  font-size: 14px;
+}
+
+.log-panel-head em {
+  color: #8f95b8;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.log-panel-head button,
+.log-panel-actions button,
+.log-level-tabs button,
+.log-demo-card button,
+.log-demo-primary {
+  border: 0;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.log-panel-head button,
+.log-panel-actions button {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #dfe6ff;
+}
+
+.log-panel-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.log-level-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.log-level-tabs button {
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #aeb5d4;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.log-level-tabs button.is-active {
+  background: rgba(77, 217, 255, 0.16);
+  color: #ffffff;
+}
+
+.log-level-tabs button.is-error.is-active {
+  background: rgba(255, 102, 122, 0.2);
+}
+
+.log-level-tabs button.is-warn.is-active {
+  background: rgba(255, 204, 102, 0.2);
+}
+
+.log-panel-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.log-panel-body {
+  min-height: 220px;
+  max-height: min(460px, calc(100vh - 220px));
+  overflow: auto;
+  padding: 10px 12px 12px;
+}
+
+.log-empty {
+  margin: 0;
+  padding: 34px 18px;
+  color: #8f95b8;
+  text-align: center;
+  font-size: 13px;
+}
+
+.log-entry {
+  display: grid;
+  grid-template-columns: 68px 56px minmax(0, 1fr);
+  gap: 8px;
+  margin-bottom: 7px;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+  font-size: 12px;
+}
+
+.log-entry.is-error {
+  border-color: rgba(255, 102, 122, 0.22);
+  background: rgba(255, 102, 122, 0.08);
+}
+
+.log-entry.is-warn {
+  border-color: rgba(255, 204, 102, 0.22);
+  background: rgba(255, 204, 102, 0.07);
+}
+
+.log-entry > span {
+  color: #7f86a8;
+  font-variant-numeric: tabular-nums;
+}
+
+.log-entry > strong {
+  color: #4dd9ff;
+  font-size: 11px;
+}
+
+.log-entry.is-warn > strong {
+  color: #ffd166;
+}
+
+.log-entry.is-error > strong {
+  color: #ff6680;
+}
+
+.log-entry p {
+  min-width: 0;
+  margin: 0;
+  color: #e8ecff;
+  overflow-wrap: anywhere;
+}
+
+.log-entry pre {
+  grid-column: 3;
+  margin: 4px 0 0;
+  max-height: 120px;
+  overflow: auto;
+  white-space: pre-wrap;
+  color: #aeb5d4;
+  font-size: 11px;
+}
+
+.log-demo-page {
+  min-height: calc(100vh - 44px);
+  padding: clamp(48px, 7vw, 92px) max(24px, calc((100vw - 1180px) / 2)) 84px;
+  background:
+    radial-gradient(circle at 78% 6%, rgba(122, 38, 96, 0.28), transparent 32%),
+    radial-gradient(circle at 18% 4%, rgba(42, 188, 220, 0.2), transparent 28%),
+    #080d28;
+  color: #ffffff;
+}
+
+.log-demo-hero {
+  max-width: 760px;
+}
+
+.log-demo-hero h1 {
+  margin: 18px 0 12px;
+  font-size: clamp(42px, 6.2vw, 78px);
+  line-height: 0.96;
+  letter-spacing: 0;
+}
+
+.log-demo-hero p {
+  max-width: 720px;
+  margin: 0 0 26px;
+  color: #b6bdd8;
+  font-size: 17px;
+  line-height: 1.75;
+}
+
+.log-demo-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border-radius: 8px;
+  color: #06101e;
+  font-weight: 900;
+  background: linear-gradient(135deg, #42dcff, #6b8bff);
+}
+
+.log-demo-primary:disabled,
+.log-demo-card button:disabled {
+  opacity: 0.62;
+  cursor: wait;
+}
+
+.log-demo-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 42px;
+}
+
+.log-demo-card {
+  display: flex;
+  min-height: 210px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.055);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.log-demo-card h2 {
+  margin: 0;
+  font-size: 19px;
+}
+
+.log-demo-card p {
+  flex: 1;
+  margin: 0;
+  color: #9ba4c7;
+  line-height: 1.65;
+}
+
+.log-demo-card button {
+  align-self: stretch;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f7f8ff;
+  font-weight: 850;
+}
+
+.log-demo-card button:hover,
+.log-panel-head button:hover,
+.log-panel-actions button:hover,
+.log-level-tabs button:hover {
+  background: rgba(255, 255, 255, 0.13);
+}
+
+@media (max-width: 860px) {
+  .log-demo-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .log-demo-page {
+    padding-inline: 18px;
+  }
+
+  .log-panel-dock {
+    left: 12px;
+    right: 12px;
+    width: auto;
+  }
+}
+
+@media (max-width: 520px) {
+  .log-panel-tools {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .log-entry {
+    grid-template-columns: 1fr;
+  }
+
+  .log-entry pre {
+    grid-column: 1;
+  }
+}

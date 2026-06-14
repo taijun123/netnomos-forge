@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 import uuid
 from dataclasses import asdict
@@ -129,6 +130,20 @@ def _safe_upload_name(filename: str) -> str:
 
 def create_app():
     """FastAPI 工厂（fastapi 懒加载）。"""
+    from forge.utils.logging_config import setup_logging  # noqa: PLC0415
+
+    setup_logging(
+        level=os.getenv("LOG_LEVEL", "INFO"),
+        log_dir=os.getenv("LOG_DIR", "logs"),
+        json_format=os.getenv("LOG_JSON", "false").lower() == "true",
+        max_bytes=int(os.getenv("LOG_MAX_BYTES", str(10 * 1024 * 1024))),
+        backup_count=int(os.getenv("LOG_BACKUP_COUNT", "5")),
+        console_level=os.getenv("LOG_CONSOLE_LEVEL"),
+    )
+    global log
+    log = logging.getLogger("server.app")
+    log.info("NetNomos Forge app initializing")
+
     try:
         from fastapi import FastAPI, HTTPException, Request          # noqa: PLC0415
         from fastapi.middleware.cors import CORSMiddleware           # noqa: PLC0415

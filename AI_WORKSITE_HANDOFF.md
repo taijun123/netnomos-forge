@@ -2,32 +2,42 @@
 
 <!-- Maintained by skills/worksite-handoff/scripts/update_handoff.py. -->
 
-- Updated: 2026-06-14 14:10:31 +0800
+- Updated: 2026-06-14 15:47:09 +0800
 - Repo: E:\yanchh\model_control\netnomos-forge
 - Branch: wip/ui-workspace-real-backend-20260614
-- Last Commit: 8ee39e9 fix: require real workflows for finance and network demos
+- Last Commit: af66799 docs: record real workflow demo baseline
 ## Objective
 
-Finish NetNomos Forge new UI and make all finance/network one-click demos use real backend workflows
+Integrate Jack branch logging without merging Jack and preserve current UI real-workflow behavior
 
 ## Current Status
 
-Removed frontend mock fallback from finance/network one-click demos. NetworkDemoPage and FinanceDemoPage now wait for real WorkflowLog results via awaitGate, surface backend errors, and use report-network/report-finance for A/B dual runs. demoDriver autoUpload now always uses uploadDataSource and throws on failure. WorkflowLog and ScenarioRunPanel now propagate backend errors. 3D office finance/network scenario runner now uses report-network/report-finance real jobs and no longer falls back to DUAL_MOCK.
+Downloaded origin/jack into _branch_snapshots/origin-jack-20260614-151544, read docs/log.md, and manually ported the logging feature into the current UI branch. Added backend rotating-file logging, frontend in-memory logger, log panel, #/log-demo route, API/SSE workflow logging, .env.example, and docs/log.md. Did not port Jack lockfile or torch dependency changes.
 
 ## Changed Files
 
 ```text
-exit 0
+M server/app.py
+ M web/src/App.tsx
+ M web/src/components/TopNav.tsx
+ M web/src/lib/apiClient.ts
+ M web/src/lib/events.ts
+ M web/src/styles.css
+?? .env.example
+?? docs/log.md
+?? forge/utils/
+?? web/src/components/LogPanel.tsx
+?? web/src/lib/logger.ts
+?? web/src/pages/LogDemoPage.tsx
 ```
 
 ## Validation
 
 - npm run build in web => passed
-- GET http://127.0.0.1:8000/api/health => status ok, jobs increased from 110 to 122 during browser QA
-- Browser topnav one-click network => #/network reached report page, live result 922 rules / 12 cards / 3 violations, uploaded dataSourceId 29ea750b63bd, app console errors/warnings []
-- Browser topnav one-click finance => #/finance reached report page, live result 7 rules / 7 cards / 5 violations, uploaded dataSourceId 8e43e07c6d25, app console errors/warnings []
-- rg mock fallback in NetworkDemoPage/FinanceDemoPage/office/App/demoDriver => no active imports or fallback usage; only unused demoMocks definitions and explicit no-mock UI text remain
+- python -m py_compile server/app.py forge/utils/logging_config.py => passed
 - git diff --check => passed
+- Browser #/intro fresh load => no log toggle/panel; #/log-demo => active nav 日志演示, panel visible, demo writes 13 log entries including real /api/health
+- python -c 'from server.app import create_app; create_app()' => created logs/forge.log with clean text file entries
 
 ## Services
 
@@ -36,9 +46,9 @@ exit 0
 
 ## Decisions And Boundaries
 
-- Do not merge Jack log commit d807ec9 yet; current UI branch remains independent from Jack log code.
-- Network/finance one-click demos should fail visibly if backend fails; no local simulated result may be substituted.
-- forge/contracts.py remains untouched.
+- Do not merge origin/jack; Jack snapshot is read-only under _branch_snapshots/origin-jack-20260614-151544 and excluded from Git.
+- Do not modify forge/contracts.py or current network/finance/workspace real-backend workflow behavior.
+- Do not port Jack pyproject/uv.lock/package-lock torch and lockfile changes; they are unrelated to the logging feature and could disturb current dependencies.
 
 ## Blockers
 
@@ -46,8 +56,7 @@ exit 0
 
 ## Next Steps
 
-- Continue UI polish only after this real workflow baseline.
-- After UI acceptance, review unused demoMocks.ts and Jack log branch separately.
+- Review git diff and commit the logging integration.
 
 ## Agent Notes
 
