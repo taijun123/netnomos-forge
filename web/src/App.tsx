@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { TopNav, type Route } from "./components/TopNav";
 import { IntroPage } from "./pages/IntroPage";
 import { NetworkDemoPage } from "./pages/NetworkDemoPage";
@@ -48,8 +48,9 @@ export function App() {
       {/* 日志面板切换按钮 */}
       <button
         onClick={() => setShowLogPanel(!showLogPanel)}
-        className="fixed bottom-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-full shadow-lg hover:bg-blue-600 transition z-50"
+        className="fixed bottom-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-full shadow-lg hover:bg-blue-600 active:bg-blue-700 transition z-[9999] pointer-events-auto cursor-pointer"
         title="切换日志面板"
+        style={{ pointerEvents: 'auto', cursor: 'pointer' }}
       >
         {showLogPanel ? '📋 隐藏日志' : '📋 显示日志'}
       </button>

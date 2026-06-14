@@ -114,7 +114,10 @@ export function subscribeWorkflow(
       }
 
       const url = workflowEventsUrl(jobId);
-      source = new EventSource(url);
+      // In development, if using proxy, SSE needs full URL
+      // Use 127.0.0.1 instead of localhost to avoid IPv6 issues
+      const sseUrl = url.startsWith('/') ? `http://127.0.0.1:8000${url}` : url;
+      source = new EventSource(sseUrl);
       let gotFirst = false;
 
       handshakeTimer = setTimeout(() => {
