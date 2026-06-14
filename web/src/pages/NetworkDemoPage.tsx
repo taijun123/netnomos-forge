@@ -10,8 +10,7 @@ import type { WorkflowStartPayload } from "../lib/apiClient";
 import type { WorkflowJobResult } from "../lib/events";
 import type { DualReport, Violation } from "../types/api";
 import { useDemo } from "../demo/DemoContext";
-import { DEMO_PACING, makeAbortableDelay, createGate, awaitGateOr, autoUpload, type Gate } from "../demo/demoDriver";
-import { NETWORK_LEARN_MOCK, NETWORK_VALIDATE_MOCK, NETWORK_DUAL_MOCK } from "../demo/demoMocks";
+import { DEMO_PACING, makeAbortableDelay, createGate, awaitGate, autoUpload, type Gate } from "../demo/demoDriver";
 
 interface NetFlowRow {
   no: number;
@@ -48,6 +47,7 @@ export function NetworkDemoPage() {
   const [validationResult, setValidationResult] = useState<WorkflowJobResult | null>(null);
   const [dualResult, setDualResult] = useState<WorkflowJobResult | null>(null);
   const [validationSource, setValidationSource] = useState<UploadedDataSource | null>(null);
+  const [demoError, setDemoError] = useState<string | null>(null);
 
   // 一键演示：自动驱动整条网络流程
   const { mode, runToken, setStatus } = useDemo();
@@ -67,10 +67,11 @@ export function NetworkDemoPage() {
     gatesRef.current = gates;
     (async () => {
       try {
+        setDemoError(null);
         setStep("upload");
         await delay(DEMO_PACING.stepBeat);
         setStep("learn"); // WorkflowLog 挂载即自动跑
-        const learn = await awaitGateOr(gates.learn, delay, () => NETWORK_LEARN_MOCK);
+        const learn = await awaitGate(gates.learn, delay, "network learn workflow");
         setLiveResult(learn);
         await delay(DEMO_PACING.afterLearn);
         setStep("cards");
@@ -82,22 +83,24 @@ export function NetworkDemoPage() {
         setDualResult(null);
         await delay(DEMO_PACING.beforeValidate);
         setValidateToken((x) => x + 1); // 触发新资料核查
-        const val = await awaitGateOr(gates.validate, delay, () => NETWORK_VALIDATE_MOCK);
+        const val = await awaitGate(gates.validate, delay, "network validation workflow");
         setValidationResult(val);
         setLiveResult(val);
         await delay(DEMO_PACING.afterValidate);
         setStep("dual");
         await delay(DEMO_PACING.beforeDual);
         setDualToken((x) => x + 1); // 触发双轨
-        const dual = await awaitGateOr(gates.dual, delay, () => NETWORK_DUAL_MOCK);
+        const dual = await awaitGate(gates.dual, delay, "network report workflow");
         setDualResult(dual);
         setLiveResult(dual);
         await delay(DEMO_PACING.afterDual);
         setStep("report");
         await delay(DEMO_PACING.reportDwell);
         setStatus("done");
-      } catch {
-        /* AbortError：被新一轮或离开页面中止，静默 */
+      } catch (err) {
+        if (isAbortError(err)) return;
+        setStatus("error");
+        setDemoError(err instanceof Error ? err.message : String(err));
       }
     })();
     return () => ac.abort();
@@ -122,6 +125,11 @@ export function NetworkDemoPage() {
       <div className="demo-stage">
         <DemoHeader />
         <LiveResultBanner result={liveResult} />
+        {demoError && (
+          <div className="workflow-error">
+            一键演示已停止，未使用本地模拟结果：{demoError}
+          </div>
+        )}
         {step === "upload" && <UploadStep onNext={() => setStep("learn")} />}
         {step === "learn" && (
           <WorkflowLog
@@ -131,6 +139,7 @@ export function NetworkDemoPage() {
               setLiveResult(result);
               gatesRef.current?.learn.resolve(result);
             }}
+            onError={(err) => gatesRef.current?.learn.reject(err)}
           />
         )}
         {step === "cards" && (
@@ -162,6 +171,7 @@ export function NetworkDemoPage() {
               setLiveResult(result);
               gatesRef.current?.validate.resolve(result);
             }}
+            onError={(err) => gatesRef.current?.validate.reject(err)}
           />
         )}
         {step === "dual" && (
@@ -172,7 +182,7 @@ export function NetworkDemoPage() {
               title="CIDDS NetFlow 上传资料核查与双轨对比"
               uploadLabel={validationSourceLabel}
               recommendedQuestion={NETWORK_SCENARIO_QUESTION}
-              sequence="learn-network"
+              sequence="report-network"
               evidence={[
                 "UDP -> noflags",
                 "Bytes <= 65535 * Packets",
@@ -189,6 +199,7 @@ export function NetworkDemoPage() {
                 setLiveResult(result);
                 gatesRef.current?.dual.resolve(result);
               }}
+              onError={(err) => gatesRef.current?.dual.reject(err)}
             />
             <DualTrackFlows dual={dualResult?.dual} />
           </div>
@@ -217,6 +228,10 @@ export function NetworkDemoPage() {
 function formatUploadedSource(source: UploadedDataSource | null): string {
   if (!source) return "尚未上传待核查资料";
   return `${source.filename} · dataSourceId ${source.dataSourceId}`;
+}
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === "AbortError";
 }
 
 function LiveResultBanner({ result }: { result: WorkflowJobResult | null }) {
@@ -294,6 +309,7 @@ function NetworkValidationStep({
   violations,
   hasValidationResult,
   onResult,
+  onError,
 }: {
   uploaded: UploadedDataSource | null;
   autoStartToken?: number;
@@ -302,6 +318,7 @@ function NetworkValidationStep({
   violations: Violation[];
   hasValidationResult: boolean;
   onResult: (result: WorkflowJobResult) => void;
+  onError?: (err: unknown) => void;
 }) {
   const [runId, setRunId] = useState<number | null>(null);
   const [running, setRunning] = useState(false);
@@ -342,6 +359,7 @@ function NetworkValidationStep({
           title="新资料核查 · 事件流"
           requestPayload={requestPayload}
           onResult={onResult}
+          onError={onError}
           onDone={() => setRunning(false)}
         />
       )}

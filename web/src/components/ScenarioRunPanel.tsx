@@ -16,6 +16,7 @@ export function ScenarioRunPanel({
   requestPayload,
   autoRunToken,
   onResult,
+  onError,
 }: {
   title: string;
   uploadLabel: string;
@@ -25,6 +26,7 @@ export function ScenarioRunPanel({
   requestPayload?: WorkflowStartPayload;
   autoRunToken?: number;
   onResult: (result: WorkflowJobResult, job: WorkflowJobStatus) => void;
+  onError?: (err: unknown, job?: WorkflowJobStatus) => void;
 }) {
   const [question, setQuestion] = useState(recommendedQuestion);
   const [runId, setRunId] = useState<number | null>(null);
@@ -87,6 +89,7 @@ export function ScenarioRunPanel({
           requestPayload={runPayload ?? undefined}
           title="实时 A/B 双轨执行"
           onResult={onResult}
+          onError={onError}
           onDone={() => setRunning(false)}
         />
       )}

@@ -14,8 +14,7 @@ import {
 } from "../lib/apiClient";
 import { useDemo } from "../demo/DemoContext";
 import { makeDemoFile, NETWORK_QUESTION, FINANCE_QUESTION, type DemoScenario } from "../demo/demoAssets";
-import { autoUpload, makeAbortableDelay, runWithFallback } from "../demo/demoDriver";
-import { DUAL_MOCK } from "../demo/demoMocks";
+import { autoUpload, makeAbortableDelay } from "../demo/demoDriver";
 import {
   agents as baseAgents,
   buildDiscoveredGroup,
@@ -232,14 +231,14 @@ export default function App() {
   }
 
   // —— 一键演示：执行所选场景，跑「专用场景管线」(network_cidds/finance_v1，与两个 demo 页同一套)，
-  //    真实结果同时喂【左侧产出物/规则集】+【手机群聊】；超时/失败统一回落内置 mock，演示永不卡死。——
+  //    真实结果同时喂【左侧产出物/规则集】+【手机群聊】；失败直接暴露，不回落本地 mock。——
   async function runOfficeDemo(scenario: DemoScenario) {
     demoAbortRef.current?.abort();
     const ac = new AbortController();
     demoAbortRef.current = ac;
     const delay = makeAbortableDelay(ac.signal);
     const label = scenario === "network" ? "网络流量" : "财务报表";
-    const seq = scenario === "network" ? "learn-network" : "learn-finance";
+    const seq = scenario === "network" ? "report-network" : "report-finance";
     const question = scenario === "network" ? NETWORK_QUESTION : FINANCE_QUESTION;
     const file = makeDemoFile(scenario);
 
@@ -250,35 +249,30 @@ export default function App() {
       await delay(1300);
 
       appendGroupMessage("courier", `快递B收到《${file.name}》，开始往返派送数据到分析工位。`);
-      const ds = await autoUpload(scenario); // 真实上传到 network_cidds/finance_v1（失败回落 mock 数据源）
+      const ds = await autoUpload(scenario); // 真实上传到 network_cidds/finance_v1
       await loadData(file.name, file, { triggerBackend: false, dataSourceId: ds.dataSourceId }); // 视觉：数据「已加载」+ 自发现组（复用上传 id，不二次上传）
       appendGroupMessage("analyst", "员工C从已加载数据抽取候选规则，员工D规则学习进行中…");
       if (ac.signal.aborted) return;
 
-      // 真实跑专用场景管线：单 job 一次性返回 rules/cards/violations/dual；超时/失败回落 mock
-      const result = await runWithFallback(
-        `office-${scenario}`,
-        async () => {
-          const jobId = await startWorkflowJob(seq, {
-            dataSourceId: ds.dataSourceId,
-            validationDataSourceId: ds.dataSourceId,
-            question,
-            reportPrompt: question,
-          });
-          const job = await waitForWorkflowJob(jobId, { attempts: 36, delayMs: 600 });
-          if (!job.result || job.status === "failed") throw new Error("office workflow 无结果");
-          return job.result;
-        },
-        () => DUAL_MOCK[scenario],
-        23000
-      );
+      // 真实跑专用场景管线：单 job 一次性返回 rules/cards/violations/dual；失败不展示本地模拟结果。
+      const jobId = await startWorkflowJob(seq, {
+        dataSourceId: ds.dataSourceId,
+        validationDataSourceId: ds.dataSourceId,
+        question,
+        reportPrompt: question,
+      });
+      const job = await waitForWorkflowJob(jobId, { attempts: 150, delayMs: 600 });
+      if (job.status === "failed") throw new Error(job.error || "office workflow failed");
+      const result = job.result;
+      if (!result) throw new Error("office workflow did not return a real result");
+      const dual = result.dual;
+      if (!dual) throw new Error("office workflow did not return a real dual report");
       if (ac.signal.aborted) return;
 
       // 真实结果喂左侧面板（产出物/规则集），受控聊天绑到本场景规则集
       ingestWorkflowResult(result);
       if (result.ruleset_id) setRulesetId(result.ruleset_id);
 
-      const dual = result.dual ?? DUAL_MOCK[scenario].dual!;
       const learnedRules = result.rules?.length ?? 0;
       const cardCount = result.cards?.length ?? 0;
       const violations = result.violations?.length ?? dual.track_a.violations.length;
@@ -307,8 +301,13 @@ export default function App() {
       setPhoneGroupChat(true);
       setPhoneOpen(true);
       setStatus("done");
-    } catch {
-      /* abort：被新的一轮演示打断，静默退出 */
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      appendGroupMessage(
+        "system",
+        `【一键演示失败】${err instanceof Error ? err.message : String(err)}。未使用本地模拟结果。`
+      );
+      setStatus("error");
     }
   }
 

@@ -14,8 +14,7 @@ import {
   FINANCE_DATASET_META,
 } from "../mock/finance";
 import { useDemo } from "../demo/DemoContext";
-import { DEMO_PACING, makeAbortableDelay, createGate, awaitGateOr, autoUpload, type Gate } from "../demo/demoDriver";
-import { FINANCE_LEARN_MOCK, FINANCE_VALIDATE_MOCK, FINANCE_DUAL_MOCK } from "../demo/demoMocks";
+import { DEMO_PACING, makeAbortableDelay, createGate, awaitGate, autoUpload, type Gate } from "../demo/demoDriver";
 import { FINANCE_QUESTION } from "../demo/demoAssets";
 
 const STEPS: StepDef[] = [
@@ -38,6 +37,7 @@ export function FinanceDemoPage() {
   const [dualResult, setDualResult] = useState<WorkflowJobResult | null>(null);
   const [auditSource, setAuditSource] = useState<UploadedDataSource | null>(null);
   const [reportQuestion, setReportQuestion] = useState(FINANCE_SCENARIO_QUESTION);
+  const [demoError, setDemoError] = useState<string | null>(null);
 
   // 一键演示：自动驱动整条财务流程
   const { mode, runToken, setStatus } = useDemo();
@@ -57,10 +57,11 @@ export function FinanceDemoPage() {
     gatesRef.current = gates;
     (async () => {
       try {
+        setDemoError(null);
         setStep("preview");
         await delay(DEMO_PACING.stepBeat);
         setStep("learn");
-        const learn = await awaitGateOr(gates.learn, delay, () => FINANCE_LEARN_MOCK);
+        const learn = await awaitGate(gates.learn, delay, "finance learn workflow");
         setLiveResult(learn);
         await delay(DEMO_PACING.afterLearn);
         setStep("upload");
@@ -72,7 +73,7 @@ export function FinanceDemoPage() {
         setStep("faults");
         await delay(DEMO_PACING.beforeValidate);
         setFaultToken((x) => x + 1); // 触发资料规则核查
-        const val = await awaitGateOr(gates.validate, delay, () => FINANCE_VALIDATE_MOCK);
+        const val = await awaitGate(gates.validate, delay, "finance validation workflow");
         setValidationResult(val);
         setLiveResult(val);
         await delay(DEMO_PACING.afterValidate);
@@ -82,15 +83,17 @@ export function FinanceDemoPage() {
         setStep("dual");
         await delay(DEMO_PACING.beforeDual);
         setDualToken((x) => x + 1); // 触发 A/B 双轨
-        const dual = await awaitGateOr(gates.dual, delay, () => FINANCE_DUAL_MOCK);
+        const dual = await awaitGate(gates.dual, delay, "finance report workflow");
         setDualResult(dual);
         setLiveResult(dual);
         await delay(DEMO_PACING.afterDual);
         setStep("report");
         await delay(DEMO_PACING.reportDwell);
         setStatus("done");
-      } catch {
-        /* AbortError 静默 */
+      } catch (err) {
+        if (isAbortError(err)) return;
+        setStatus("error");
+        setDemoError(err instanceof Error ? err.message : String(err));
       }
     })();
     return () => ac.abort();
@@ -115,6 +118,11 @@ export function FinanceDemoPage() {
       <div className="demo-stage">
         <DemoHeader />
         <LiveResultBanner result={liveResult} />
+        {demoError && (
+          <div className="workflow-error">
+            一键演示已停止，未使用本地模拟结果：{demoError}
+          </div>
+        )}
         {step === "preview" && <PreviewStep onNext={() => setStep("learn")} />}
         {step === "learn" && (
           <>
@@ -125,6 +133,7 @@ export function FinanceDemoPage() {
                 setLiveResult(result);
                 gatesRef.current?.learn.resolve(result);
               }}
+              onError={(err) => gatesRef.current?.learn.reject(err)}
             />
             {ruleCards.length > 0 ? (
               <RuleCardWall cards={ruleCards} />
@@ -163,6 +172,7 @@ export function FinanceDemoPage() {
                 setLiveResult(result);
                 gatesRef.current?.validate.resolve(result);
               }}
+              onError={(err) => gatesRef.current?.validate.reject(err)}
               onNext={() => setStep("question")}
             />
           ) : (
@@ -195,7 +205,7 @@ export function FinanceDemoPage() {
               title="华信咨询资料包审阅"
               uploadLabel={auditSourceLabel}
               recommendedQuestion={reportQuestion}
-              sequence="learn-finance"
+              sequence="report-finance"
               evidence={[
                 "R01 进销存勾稽",
                 "R02 资产负债配平",
@@ -212,6 +222,7 @@ export function FinanceDemoPage() {
                 setLiveResult(result);
                 gatesRef.current?.dual.resolve(result);
               }}
+              onError={(err) => gatesRef.current?.dual.reject(err)}
             />
             <DualReport dual={dualResult?.dual} />
           </div>
@@ -244,6 +255,10 @@ export function FinanceDemoPage() {
 function formatUploadedSource(source: UploadedDataSource | null): string {
   if (!source) return "尚未上传待审资料";
   return `${source.filename} · dataSourceId ${source.dataSourceId}`;
+}
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === "AbortError";
 }
 
 function LiveResultBanner({ result }: { result: WorkflowJobResult | null }) {
@@ -388,6 +403,7 @@ function FaultCards({
   autoStartToken,
   requestPayload,
   onResult,
+  onError,
   onNext,
 }: {
   violations: Violation[];
@@ -396,6 +412,7 @@ function FaultCards({
   autoStartToken?: number;
   requestPayload: WorkflowStartPayload;
   onResult: (result: WorkflowJobResult) => void;
+  onError?: (err: unknown) => void;
   onNext: () => void;
 }) {
   const [runId, setRunId] = useState<number | null>(null);
@@ -436,6 +453,7 @@ function FaultCards({
           title="资料核查 · 事件流"
           requestPayload={requestPayload}
           onResult={onResult}
+          onError={onError}
           onDone={() => setRunning(false)}
         />
       )}

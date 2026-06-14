@@ -52,6 +52,7 @@ export function WorkflowLog({
   requestPayload,
   onResult,
   onDone,
+  onError,
 }: {
   sequence: MockSequenceId;
   autoStart?: boolean;
@@ -60,6 +61,7 @@ export function WorkflowLog({
   requestPayload?: WorkflowStartPayload;
   onResult?: (result: WorkflowJobResult, job: WorkflowJobStatus) => void;
   onDone?: (job?: WorkflowJobStatus) => void;
+  onError?: (err: unknown, job?: WorkflowJobStatus) => void;
 }) {
   const [events, setEvents] = useState<WorkflowEvent[]>([]);
   const [mode, setMode] = useState<StreamMode | null>(null);
@@ -92,12 +94,18 @@ export function WorkflowLog({
         setRunning(false);
         setDone(true);
         setJobStatus(job?.status ?? null);
+        if (job?.status === "failed") {
+          const err = new Error(job.error || "workflow job failed");
+          setError(err.message);
+          onError?.(err, job);
+        }
         if (job?.result) onResult?.(job.result, job);
         onDone?.(job);
       },
       onError: (err) => {
         setRunning(false);
         setError(err instanceof Error ? err.message : String(err));
+        onError?.(err);
       },
     }, effectivePayload);
     handleRef.current = handle;

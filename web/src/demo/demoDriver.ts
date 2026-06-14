@@ -1,9 +1,8 @@
 // 一键演示的命令式编排原语：节奏延迟、可中止 delay、Gate(把"等一个 WorkflowLog 跑完"变可 await)、
-// 后端降级(超时/失败回落 mock)、自动上传。各页面/办公室组合这些原语写自动脚本。
+// 自动上传。网络/财务正式演示必须走真实后端，不再回落本地 mock 结果。
 import { uploadDataSource } from "../lib/apiClient";
 import type { UploadedDataSource } from "../components/DataSourceUploadBox";
 import { makeDemoFile, type DemoScenario } from "./demoAssets";
-import { DEMO_MOCK_DATASOURCE } from "./demoMocks";
 
 // 各步停留节奏（毫秒），像真人在操作；一处调参
 export const DEMO_PACING = {
@@ -15,7 +14,7 @@ export const DEMO_PACING = {
   beforeDual: 1500,
   afterDual: 2400,
   reportDwell: 3500,
-  gateTimeout: 14000,
+  gateTimeout: 90000,
 };
 
 export type Delay = (ms: number) => Promise<void>;
@@ -53,49 +52,26 @@ export function createGate<T>(): Gate<T> {
   return { promise, resolve, reject };
 }
 
-// 等 gate（一个 WorkflowLog 完成 onDone/onResult resolve）；超时则回落 fallback，绝不卡死
-export async function awaitGateOr<T>(
+// 等 gate（一个 WorkflowLog 完成 onResult resolve）；超时/失败即抛错，不能用假结果顶替。
+export async function awaitGate<T>(
   gate: Gate<T>,
   delay: Delay,
-  fallback: () => T,
+  label: string,
   ms: number = DEMO_PACING.gateTimeout
 ): Promise<T> {
-  return Promise.race([
+  return Promise.race<T>([
     gate.promise,
     delay(ms).then<T>(() => {
-      throw new Error("gate timeout");
+      throw new Error(`${label} did not return a real backend result within ${Math.round(ms / 1000)}s`);
     }),
-  ]).catch(() => fallback());
+  ]);
 }
 
-// 后端调用统一降级包装：超时 race + 失败回落
-export async function runWithFallback<T>(
-  label: string,
-  real: () => Promise<T>,
-  fallback: () => T,
-  timeoutMs: number = DEMO_PACING.gateTimeout
-): Promise<T> {
-  try {
-    return await Promise.race([
-      real(),
-      new Promise<T>((_, rj) => setTimeout(() => rj(new Error(`${label} timeout`)), timeoutMs)),
-    ]);
-  } catch (e) {
-    console.warn("[demo fallback]", label, e);
-    return fallback();
-  }
-}
-
-// 模拟真人上传：构造内联 demo File，走与手动上传完全相同的 apiClient.uploadDataSource；失败回落 mock dataSource
+// 模拟真人上传：构造内联 demo File，走与手动上传完全相同的 apiClient.uploadDataSource。
+// 上传失败必须暴露给页面，不能回落 mock dataSource。
 export async function autoUpload(scenario: DemoScenario): Promise<UploadedDataSource> {
   const apiScenario = scenario === "network" ? "network_cidds" : "finance_v1";
   const file = makeDemoFile(scenario);
-  return runWithFallback(
-    "upload",
-    async () => {
-      const r = await uploadDataSource(apiScenario, file, `${scenario}-demo-auto`);
-      return { ...r, filename: r.filename || file.name, size: r.size ?? file.size };
-    },
-    () => DEMO_MOCK_DATASOURCE[scenario]
-  );
+  const r = await uploadDataSource(apiScenario, file, `${scenario}-demo-auto`);
+  return { ...r, filename: r.filename || file.name, size: r.size ?? file.size };
 }
