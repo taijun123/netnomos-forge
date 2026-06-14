@@ -2,50 +2,33 @@
 
 <!-- Maintained by skills/worksite-handoff/scripts/update_handoff.py. -->
 
-- Updated: 2026-06-13 20:43:06 +0800
+- Updated: 2026-06-14 13:21:31 +0800
 - Repo: E:\yanchh\model_control\netnomos-forge
-- Branch: main
-- Last Commit: 80ab1e0 Initial NetNomos Forge implementation
+- Branch: wip/ui-workspace-real-backend-20260614
+- Last Commit: c593532 fix: improve workspace demo controls layout
 ## Objective
 
-Keep NetNomos Forge resumable across Codex, Claude, and subagents while office/finance/network demo integration continues.
+Finish NetNomos Forge new UI and workspace real-backend demo while keeping Jack log branch out for now
 
 ## Current Status
 
-Created a reusable worksite-handoff skill for multi-model operation. The skill is committed-ready in the repo, installed for Codex globally, installed for Claude at project scope, and generated AI_WORKSITE_HANDOFF.md as the concise current worksite snapshot.
+Created temporary branch wip/ui-workspace-real-backend-20260614 and saved UI/workspace state. Confirmed d807ec9 Jack log commit is not an ancestor of current UI branch or local main. Removed partial LogPanel/LogDemoPage references so this UI branch builds without Jack log files. Fixed one-click menu so it opens scenario choices instead of immediately starting network demo. Verified workspace network one-click uses real backend uploadDataSource/startWorkflowJob/fetchWorkflowJob and completed a real validate-network job.
 
 ## Changed Files
 
 ```text
-M CLAUDE_HANDOFF.md
- M server/app.py
- M server/pipeline.py
- M server/store.py
- M web/package-lock.json
- M web/package.json
- M web/src/App.tsx
- M web/src/components/TopNav.tsx
- M web/src/lib/apiClient.ts
- M web/src/types/api.ts
-?? .claude/
-?? AI_WORKSITE_HANDOFF.md
-?? docs/OFFICE_DEMO_OPERATION_GUIDE.md
-?? docs/OFFICE_DEMO_TECHNICAL_REPORT.md
-?? docs/OFFICE_DEMO_USE_CASES.md
-?? forge/scenarios/office_demo/
-?? skills/
-?? tests/test_office_demo.py
-?? web/public/
-?? web/src/office/
-?? web/src/pages/OfficeDemoPage.tsx
+exit 0
 ```
 
 ## Validation
 
-- python quick_validate.py skills\worksite-handoff => Skill is valid
-- python -m py_compile skills\worksite-handoff\scripts\update_handoff.py => passed
-- python quick_validate.py C:\Users\A\.codex\skills\worksite-handoff => Skill is valid
-- python quick_validate.py .claude\skills\worksite-handoff => Skill is valid
+- git merge-base --is-ancestor d807ec9 HEAD => not ancestor
+- npm run build in web => passed
+- GET http://127.0.0.1:8000/api/health => status ok
+- Browser #/intro => top nav includes workspace, no console errors, no overflow candidates
+- Browser one-click menu => contains network, finance, 3D office, workspace network, workspace finance
+- Browser #/workspace network one-click => real job 519f90ad done, all five agent cards done, no workspace error
+- Browser mobile 390x844 #/workspace => no horizontal overflow
 
 ## Services
 
@@ -54,9 +37,9 @@ M CLAUDE_HANDOFF.md
 
 ## Decisions And Boundaries
 
-- forge/contracts.py remains frozen unless the user explicitly permits edits.
-- AI_WORKSITE_HANDOFF.md is the concise current snapshot; CLAUDE_HANDOFF.md remains extended project history.
-- The skill is installed at C:\Users\A\.codex\skills\worksite-handoff and E:\yanchh\model_control\netnomos-forge\.claude\skills\worksite-handoff.
+- Do not merge Jack log commit d807ec9 yet; finish UI first, then review Jack log changes separately.
+- Current branch is wip/ui-workspace-real-backend-20260614; safety commits cb880be, 42d8116, c593532 preserve work.
+- forge/contracts.py remains untouched.
 
 ## Blockers
 
@@ -64,9 +47,9 @@ M CLAUDE_HANDOFF.md
 
 ## Next Steps
 
-- In a new Codex or Claude session, prompt: Use $worksite-handoff to load AI_WORKSITE_HANDOFF.md and continue.
-- Before stopping or switching models, rerun update_handoff.py with the latest objective, validation, blockers, and next actions.
+- Continue UI polish on intro/workspace only.
+- After UI acceptance, compare and selectively merge Jack log changes from d807ec9/5236303/92496ba.
 
 ## Agent Notes
 
-- Main agent created, validated, installed, and documented worksite-handoff.
+- None recorded.
