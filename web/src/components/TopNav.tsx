@@ -1,13 +1,14 @@
 import { useDemo } from "../demo/DemoContext";
 import { DemoStartMenu } from "../demo/DemoStartMenu";
 
-export type Route = "intro" | "network" | "finance" | "office";
+export type Route = "intro" | "network" | "finance" | "office" | "workspace";
 
 const ITEMS: Array<{ id: Route; label: string }> = [
   { id: "intro", label: "介绍" },
   { id: "network", label: "网络 demo" },
   { id: "finance", label: "财务 demo" },
   { id: "office", label: "3D 办公室" },
+  { id: "workspace", label: "工作台" },
 ];
 
 export function TopNav({
