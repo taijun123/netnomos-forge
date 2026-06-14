@@ -669,10 +669,12 @@ export function WorkspacePage() {
 
       <section className="workspace-chat-shell">
         <header className="workspace-chat-top">
-          <span className="workspace-live-dot" />
-          <strong>{selectedTask.name}</strong>
-          <em>· {selectedPack.name} {selectedPack.version}</em>
-          {learnJob && <small>job {learnJob.jobId.slice(0, 8)} · {learnJob.status}</small>}
+          <div className="workspace-chat-title">
+            <span className="workspace-live-dot" />
+            <strong>{selectedTask.name}</strong>
+            <em>· {selectedPack.name} {selectedPack.version}</em>
+            {learnJob && <small>job {learnJob.jobId.slice(0, 8)} · {learnJob.status}</small>}
+          </div>
           <div className="workspace-demo-controls">
             <label>
               <span>演示场景</span>

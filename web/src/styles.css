@@ -5818,6 +5818,8 @@ code,
   align-items: center;
   gap: 8px;
   margin-left: auto;
+  min-width: 284px;
+  justify-content: flex-end;
 }
 
 .workspace-demo-controls label {
@@ -5828,6 +5830,7 @@ code,
   color: rgba(226, 232, 255, 0.62);
   font-size: 12px;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .workspace-demo-controls select,
@@ -6013,5 +6016,58 @@ code,
 
   .workspace-agent-run > div {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Keep long workspace task names from crushing the demo controls. */
+.workspace-chat-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+}
+
+.workspace-chat-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.workspace-chat-title strong,
+.workspace-chat-title em,
+.workspace-chat-title small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-chat-title strong {
+  flex: 0 1 auto;
+  color: #ffffff;
+  font-size: 17px;
+}
+
+.workspace-chat-title em {
+  flex: 1 1 auto;
+  color: rgba(176, 179, 200, 0.78);
+  font-style: normal;
+}
+
+.workspace-chat-title small {
+  flex: 0 0 auto;
+  color: rgba(176, 179, 200, 0.72);
+}
+
+@media (max-width: 980px) {
+  .workspace-chat-top {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-demo-controls {
+    width: 100%;
+    min-width: 0;
+    justify-content: flex-start;
   }
 }

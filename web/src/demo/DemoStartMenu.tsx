@@ -28,7 +28,12 @@ export function DemoStartMenu({
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
     >
-      <button type="button" className="demo-start-trigger topnav-cta" onClick={pickNetwork}>
+      <button
+        type="button"
+        className="demo-start-trigger topnav-cta"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
         ▶ 一键演示
       </button>
       <AnimatePresence>
