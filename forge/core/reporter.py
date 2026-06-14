@@ -647,10 +647,17 @@ class DualReporter:
             '</div></div>')
 
     # ====================================================================== 网络
-    def track_a_network(self, n: int = 10) -> TrackReport:
+    def track_a_network(
+        self,
+        n: int = 10,
+        rows: list[dict[str, Any]] | None = None,
+        source_label: str = "裸模型生成",
+    ) -> TrackReport:
         """A 轨：裸模型生成 NetFlow（mock 走确定性带错样本）."""
-        rows: list[dict[str, Any]] | None = None
-        if self.llm is not None:
+        source_rows = [dict(row) for row in rows] if rows is not None else None
+        if source_rows is not None:
+            rows = source_rows
+        elif self.llm is not None:
             prompt = (
                 f"请生成 {n} 条 CIDDS 风格的 NetFlow CSV 记录，字段："
                 f"{','.join(_NET_COLS)}。只输出 CSV（含表头），不要解释。")
@@ -665,12 +672,14 @@ class DualReporter:
         if not rows:
             rows = mock_netflow_with_errors(n)
         violations = check_netflow_rows(rows)
-        if len(rows) < n or not violations:
+        if source_rows is None and (len(rows) < n or not violations):
             rows = mock_netflow_with_errors(n)
             violations = check_netflow_rows(rows)
-        md = ("## A 轨 · 裸模型生成的 NetFlow（10 条）\n\n"
+        heading = f"## A 轨 · {source_label}的 NetFlow（{len(rows)} 条）"
+        md = (heading + "\n\n"
               + _rows_to_md_table(rows) + "\n\n### 规则核查\n\n"
-              + "\n".join(f"- ❌ {v.message_zh}" for v in violations))
+              + ("\n".join(f"- ❌ {v.message_zh}" for v in violations)
+                 if violations else "- ✅ 0 违规"))
         return TrackReport(track="A", markdown=md,
                            slots={"rows": rows}, violations=violations,
                            intervention_log=[])
@@ -736,10 +745,21 @@ class DualReporter:
                            slots={"rows": rows}, violations=violations,
                            intervention_log=logbook)
 
-    def make_dual_network(self, n: int = 10, generator=None) -> DualReport:
+    def make_dual_network(
+        self,
+        n: int = 10,
+        generator=None,
+        track_a_rows: list[dict[str, Any]] | None = None,
+        track_a_source_label: str = "裸模型生成",
+    ) -> DualReport:
         """网络双轨：A 轨带错样本标红 vs B 轨约束生成 0 违规."""
-        a = self.track_a_network(n)
-        b = self.track_b_network(n, generator=generator)
+        a = self.track_a_network(
+            n,
+            rows=track_a_rows,
+            source_label=track_a_source_label,
+        )
+        b_count = len(a.slots.get("rows", [])) if track_a_rows is not None else n
+        b = self.track_b_network(b_count, generator=generator)
         diff_html = self._build_net_diff_html(a, b)
         return DualReport(
             scenario="network_cidds",

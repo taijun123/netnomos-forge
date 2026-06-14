@@ -19,11 +19,13 @@ from __future__ import annotations
 
 import logging
 import os
+import csv
+import json
 from importlib.util import find_spec
 from pathlib import Path
 from typing import Any, Callable
 
-from forge.contracts import Rule, RuleCard, RuleSet, SCENARIO_DIR, WorkflowEvent
+from forge.contracts import Rule, RuleCard, RuleSet, SCENARIO_DIR, ViolationReport, WorkflowEvent
 
 log = logging.getLogger("server.pipeline")
 
@@ -33,12 +35,15 @@ NETNOMOS_CIDDS_RULES = FORGE_ROOT.parent / "NetNomos" / "rules" / "golden_cidds"
 GOLDEN_CIDDS_RULES = FORGE_CIDDS_RULES if FORGE_CIDDS_RULES.exists() else NETNOMOS_CIDDS_RULES
 CIDDS_TRAIN_CSV = FORGE_ROOT.parent / "NetNomos" / "data" / "cidds_wk2_normal_10k.csv"
 FIN_MANUAL_RULES = SCENARIO_DIR / "finance_v1" / "manual_rules.json"
+NETWORK_UPLOADS_DIR = FORGE_ROOT / "demo_artifacts" / "uploads" / "network_cidds"
+NETWORK_REQUIRED_FIELDS = {"Proto", "Packets", "Bytes"}
 
 Emit = Callable[[WorkflowEvent], None]
 
 # 网络规则卡最多展示条数（golden 规则集较大，截断保证演示节奏）
 NET_MAX_CARDS = 12
 ENABLE_RULECARD_LLM = os.getenv("FORGE_RULECARD_LLM", "").lower() in {"1", "true", "yes", "on"}
+NETWORK_UPLOAD_SUFFIXES = {".csv", ".json", ".txt"}
 
 
 def _env_int(name: str, default: int, *, minimum: int = 0) -> int:
@@ -57,6 +62,134 @@ RULECARD_LLM_MAX_CARDS = _env_int("FORGE_RULECARD_LLM_MAX_CARDS", 2)
 
 def _ev(emit: Emit, stage: str, status: str, desc: str) -> None:
     emit(WorkflowEvent.make(stage, status, desc))
+
+
+def _network_vreport(rows: list[dict[str, Any]], data_path: str) -> ViolationReport:
+    from forge.core.reporter import check_netflow_rows  # noqa: PLC0415
+
+    violations = check_netflow_rows(rows)
+    by_rule: dict[str, int] = {}
+    for violation in violations:
+        by_rule[violation.rule_id] = by_rule.get(violation.rule_id, 0) + 1
+    bad_rows = {violation.row_index for violation in violations}
+    total_rows = len(rows)
+    satisfaction_rate = 1.0 if total_rows == 0 else 1.0 - (len(bad_rows) / total_rows)
+    return ViolationReport(
+        scenario="network_cidds",
+        data_path=data_path,
+        total_rows=total_rows,
+        violations=violations,
+        satisfaction_rate=satisfaction_rate,
+        by_rule=by_rule,
+    )
+
+
+def _request_params(job: Any) -> dict[str, Any]:
+    return dict(getattr(job, "request_params", None) or {})
+
+
+def _job_sequence(job: Any) -> str:
+    return str(getattr(job, "sequence", "") or "")
+
+
+def _network_data_source_id(
+    params: dict[str, Any],
+    sequence: str,
+    purpose: str,
+) -> str | None:
+    if purpose == "training":
+        value = params.get("trainingDataSourceId")
+        if value:
+            return str(value)
+        if sequence == "learn-network" and params.get("dataSourceId"):
+            return str(params["dataSourceId"])
+    if purpose == "validation":
+        value = params.get("validationDataSourceId")
+        if value:
+            return str(value)
+        if sequence in {"validate-network", "report-network"} and params.get("dataSourceId"):
+            return str(params["dataSourceId"])
+    return None
+
+
+def _read_network_upload_rows(path: Path) -> list[dict[str, Any]]:
+    text = path.read_text(encoding="utf-8-sig")
+    suffix = path.suffix.lower()
+    if suffix == ".json" or (suffix == ".txt" and text.lstrip().startswith(("{", "["))):
+        payload = json.loads(text)
+        if isinstance(payload, dict):
+            payload = payload.get("rows")
+        if not isinstance(payload, list) or not all(isinstance(row, dict) for row in payload):
+            raise RuntimeError(f"network upload JSON must be a row list or object with rows: {path.name}")
+        rows = [dict(row) for row in payload]
+    else:
+        reader = csv.DictReader(line for line in text.splitlines() if line.strip())
+        rows = [
+            {
+                str(key).strip(): (value.strip() if isinstance(value, str) else value)
+                for key, value in row.items()
+                if key is not None
+            }
+            for row in reader
+        ]
+    if not rows:
+        raise RuntimeError(f"network upload is empty or cannot be parsed: {path.name}")
+    missing = NETWORK_REQUIRED_FIELDS - set(rows[0])
+    if missing:
+        raise RuntimeError(
+            f"network upload missing required fields {', '.join(sorted(missing))}: {path.name}"
+        )
+    return rows
+
+
+def _load_network_data_source(
+    data_source_id: str | None,
+    *,
+    purpose: str,
+) -> dict[str, Any] | None:
+    if not data_source_id:
+        return None
+    from server.store import get_store                  # noqa: PLC0415
+
+    store = get_store()
+    meta = store.data_sources.get(data_source_id)
+    if meta is None:
+        raise RuntimeError(
+            f"上传数据源 {data_source_id} 不存在，可能服务已重启，请重新上传。"
+        )
+    scenario = str(meta.get("scenario") or "")
+    if scenario != "network_cidds":
+        raise RuntimeError(
+            f"上传数据源 {data_source_id} 属于 {scenario}，不能用于 network_cidds。"
+        )
+    raw_path = meta.get("path")
+    if not raw_path:
+        raise RuntimeError(f"上传数据源 {data_source_id} 没有可读取文件路径。")
+    path = Path(str(raw_path)).resolve()
+    uploads_root = NETWORK_UPLOADS_DIR.resolve()
+    try:
+        path.relative_to(uploads_root)
+    except ValueError as exc:
+        raise RuntimeError(
+            f"上传数据源 {data_source_id} 路径越界，拒绝读取：{path}"
+        ) from exc
+    if path.suffix.lower() not in NETWORK_UPLOAD_SUFFIXES:
+        raise RuntimeError(
+            f"网络{purpose}仅支持 CSV、JSON、TXT 文件：{path.name}"
+        )
+    if not path.is_file():
+        raise RuntimeError(
+            f"上传数据源 {data_source_id} 文件不存在，请重新上传：{path.name}"
+        )
+    rows = _read_network_upload_rows(path)
+    return {
+        "id": data_source_id,
+        "meta": meta,
+        "path": path,
+        "rows": rows,
+        "filename": str(meta.get("filename") or path.name),
+        "purpose": purpose,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -188,13 +321,52 @@ def run_network_pipeline(job: Any, emit: Emit, llm=None,
     """
     from forge.core.engine import ForgeRuleEngine          # noqa: PLC0415
     from forge.core.explainer import RuleExplainer         # noqa: PLC0415
-    from forge.core.reporter import NET_RULE_TEXTS, DualReporter  # noqa: PLC0415
+    from forge.core.reporter import (  # noqa: PLC0415
+        NET_RULE_TEXTS,
+        DualReporter,
+    )
 
     _ev(emit, "control", "running", "网络规则自发现任务开始编排。")
-    _ev(emit, "upload", "running", "接收 cidds_wk2_normal_10k.csv…")
-    data_note = (f"训练集就绪：{CIDDS_TRAIN_CSV.name}"
-                 if CIDDS_TRAIN_CSV.exists()
-                 else "训练集文件不在本机（仅影响真实学习，不影响降级演示）")
+    params = _request_params(job)
+    sequence = _job_sequence(job)
+    training_source = _load_network_data_source(
+        _network_data_source_id(params, sequence, "training"),
+        purpose="规则学习",
+    )
+    validation_source = _load_network_data_source(
+        _network_data_source_id(params, sequence, "validation"),
+        purpose="核查/报告",
+    )
+
+    data_source_id = params.get("dataSourceId")
+    used_ids = {
+        source["id"]
+        for source in (training_source, validation_source)
+        if source is not None
+    }
+    if data_source_id and str(data_source_id) not in used_ids:
+        _load_network_data_source(str(data_source_id), purpose="dataSourceId")
+
+    upload_target = (
+        training_source["filename"] if training_source
+        else validation_source["filename"] if validation_source
+        else "cidds_wk2_normal_10k.csv"
+    )
+    _ev(emit, "upload", "running", f"接收 {upload_target}…")
+    if training_source:
+        data_note = (
+            f"自定义训练集就绪：{training_source['filename']}，"
+            f"{len(training_source['rows'])} 条 NetFlow 记录，dataSourceId={training_source['id']}"
+        )
+    elif validation_source:
+        data_note = (
+            f"待核查资料就绪：{validation_source['filename']}，"
+            f"{len(validation_source['rows'])} 条 NetFlow 记录，dataSourceId={validation_source['id']}"
+        )
+    else:
+        data_note = (f"训练集就绪：{CIDDS_TRAIN_CSV.name}"
+                     if CIDDS_TRAIN_CSV.exists()
+                     else "训练集文件不在本机（仅影响真实学习，不影响降级演示）")
     _ev(emit, "upload", "done", data_note)
     _ev(emit, "prepare", "done", "DatasetSpec / GrammarSpec 解析完成。")
 
@@ -203,7 +375,25 @@ def run_network_pipeline(job: Any, emit: Emit, llm=None,
         "stage=learn processor=NetNomos hitting-set/Z3：准备 CIDDS 规则集…")
     engine = ForgeRuleEngine.from_scenario("network_cidds")
     ruleset: RuleSet | None = None
-    if use_netnomos and find_spec("netnomos") is not None and CIDDS_TRAIN_CSV.exists():
+    if training_source is not None:
+        if find_spec("netnomos") is None:
+            _ev(emit, "learn", "blocked",
+                "custom network learn requires NetNomos runtime; current environment has no netnomos module")
+            raise RuntimeError(
+                "自定义规则学习需要 NetNomos runtime；当前环境不可用，"
+                "请改用内置数据或在宿主机安装 NetNomos 后重试。"
+            )
+        try:
+            ruleset = engine.learn(training_source["path"])
+            _ev(emit, "learn", "done",
+                f"stage=learn processor=NetNomos hitting-set/Z3："
+                f"基于自定义数据 {training_source['filename']} 学习完成 {len(ruleset.rules)} 条规则。")
+        except Exception as exc:
+            _ev(emit, "learn", "blocked", f"custom network learn failed: {exc}")
+            raise RuntimeError(
+                f"自定义训练数据规则学习失败：{training_source['filename']}：{exc}"
+            ) from exc
+    elif use_netnomos and find_spec("netnomos") is not None and CIDDS_TRAIN_CSV.exists():
         try:
             ruleset = engine.learn(CIDDS_TRAIN_CSV)
             _ev(emit, "learn", "done",
@@ -246,19 +436,54 @@ def run_network_pipeline(job: Any, emit: Emit, llm=None,
         f"规则卡 {len(cards)} 张（疑似巧合 "
         f"{sum(1 for c in cards if c.is_coincidence)} 张）。")
 
+    validation_violations = []
+    vreport = None
+    track_a_rows = None
+    track_a_source_label = "裸模型生成"
+    if validation_source is not None:
+        _ev(emit, "validate", "running",
+            f"对上传资料 {validation_source['filename']} 逐行核查 NetFlow 规则…")
+        vreport = _network_vreport(validation_source["rows"], str(validation_source["path"]))
+        validation_violations = vreport.violations
+        _ev(emit, "validate", "done",
+            f"核查完成：{len(validation_source['rows'])} 条记录，"
+            f"命中 {len(validation_violations)} 处违规。")
+        track_a_rows = validation_source["rows"]
+        track_a_source_label = f"上传资料 {validation_source['filename']}"
+
     # -- report / diff --------------------------------------------------------------
     _ev(emit, "report", "running",
         "stage=report processor=A轨裸模型+B轨约束：A 轨裸模型生成 10 条 NetFlow…")
     _ev(emit, "report", "running",
         "stage=report processor=A轨裸模型+B轨约束：B 轨 LeJIT 约束生成（沙箱降级读预置合规样本）…")
     reporter = DualReporter(llm=llm)
-    dual = reporter.make_dual_network(10)
+    dual = reporter.make_dual_network(
+        10,
+        track_a_rows=track_a_rows,
+        track_a_source_label=track_a_source_label,
+    )
     _ev(emit, "report", "done",
         f"双轨生成完毕：A 轨 {len(dual.track_a.violations)} 条违规，"
         f"B 轨 {len(dual.track_b.violations)} 条违规。")
     _ev(emit, "diff", "done", "双轨 NetFlow 对比标红完成。")
     _ev(emit, "control", "done", "网络双轨产物归档完成。")
-    return {"ruleset": ruleset, "cards": cards, "dual": dual}
+    return {
+        "ruleset": ruleset,
+        "cards": cards,
+        "vreport": vreport,
+        "dual": dual,
+        "violations": validation_violations or dual.track_a.violations,
+        "data_source": {
+            "training": {
+                "id": training_source["id"],
+                "filename": training_source["filename"],
+            } if training_source else None,
+            "validation": {
+                "id": validation_source["id"],
+                "filename": validation_source["filename"],
+            } if validation_source else None,
+        },
+    }
 
 
 # ---------------------------------------------------------------------------

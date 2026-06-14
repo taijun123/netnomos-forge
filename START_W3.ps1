@@ -85,7 +85,7 @@ $BackendJob = Start-Job -ScriptBlock {
 } -ArgumentList $Root
 Write-Host "  后端 PID: $($BackendJob.Id)（后台 Job）" -ForegroundColor DarkGray
 Start-Sleep 3
-Write-Host "[Step 5] 后端已启动 http://localhost:8000`n" -ForegroundColor Green
+Write-Host "[Step 5] 后端已启动 http://127.0.0.1:8000`n" -ForegroundColor Green
 
 # ---------- Step 6: 启动前端 ----------
 Write-Host "[Step 6/6] 启动 Web 前端 (port 5173)..." -ForegroundColor Yellow
@@ -96,7 +96,7 @@ if (Test-Path "$WebDir\package.json") {
         Write-Host "  npm install..." -ForegroundColor DarkGray
         npm install
     }
-    $env:VITE_API_BASE = "http://localhost:8000"
+    $env:VITE_API_BASE = "http://127.0.0.1:8000"
     $FrontendJob = Start-Job -ScriptBlock {
         param($w)
         Set-Location $w
@@ -104,7 +104,7 @@ if (Test-Path "$WebDir\package.json") {
     } -ArgumentList $WebDir
     Write-Host "  前端 PID: $($FrontendJob.Id)（后台 Job）" -ForegroundColor DarkGray
     Start-Sleep 3
-    Write-Host "[Step 6] 前端已启动 http://localhost:5173`n" -ForegroundColor Green
+    Write-Host "[Step 6] 前端已启动 http://127.0.0.1:5173`n" -ForegroundColor Green
 } else {
     Write-Host "[Step 6] 跳过：web/package.json 不存在`n" -ForegroundColor DarkYellow
 }
@@ -112,7 +112,7 @@ if (Test-Path "$WebDir\package.json") {
 Set-Location $Root
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  所有服务已启动！" -ForegroundColor Cyan
-Write-Host "  后端：http://localhost:8000/docs" -ForegroundColor Cyan
-Write-Host "  前端：http://localhost:5173" -ForegroundColor Cyan
+Write-Host "  后端：http://127.0.0.1:8000/docs" -ForegroundColor Cyan
+Write-Host "  前端：http://127.0.0.1:5173" -ForegroundColor Cyan
 Write-Host "  停止后台服务：Get-Job | Stop-Job ; Get-Job | Remove-Job" -ForegroundColor Cyan
 Write-Host "========================================`n" -ForegroundColor Cyan

@@ -176,13 +176,15 @@ export default function App() {
     }
   }
 
-  async function syncWorkflowJob(jobId: string) {
+  async function syncWorkflowJob(jobId: string): Promise<Awaited<ReturnType<typeof fetchWorkflowJob>> | null> {
     try {
       const job = await fetchWorkflowJob(jobId);
       ingestWorkflowResult(job.result);
       if (job.error) showBackendError("workflow result", job.error);
+      return job;
     } catch (error) {
       showBackendError("workflow result", error);
+      return null;
     }
   }
 
@@ -325,7 +327,43 @@ export default function App() {
 
   useEffect(() => {
     if (!workflowJobId) return;
+    let active = true;
+    let polling = false;
+    let pollTimer: number | undefined;
     const source = new EventSource(workflowEventsUrl(workflowJobId));
+
+    const stopPolling = () => {
+      if (pollTimer !== undefined) {
+        window.clearTimeout(pollTimer);
+        pollTimer = undefined;
+      }
+    };
+
+    const schedulePoll = () => {
+      if (!active) return;
+      pollTimer = window.setTimeout(() => {
+        void pollWorkflowJob();
+      }, 1500);
+    };
+
+    const pollWorkflowJob = async () => {
+      if (!active) return;
+      const job = await syncWorkflowJob(workflowJobId);
+      if (!active) return;
+      if (job?.status === "done" || job?.status === "failed") {
+        stopPolling();
+        return;
+      }
+      schedulePoll();
+    };
+
+    const startPolling = () => {
+      if (polling) return;
+      polling = true;
+      source.close();
+      void pollWorkflowJob();
+    };
+
     source.addEventListener("workflow", (event) => {
       try {
         const payload = JSON.parse((event as MessageEvent).data) as ForgeWorkflowEvent;
@@ -335,16 +373,19 @@ export default function App() {
           status: payload.status,
           description: payload.description,
         });
-        if (payload.status === "done") void syncWorkflowJob(workflowJobId);
+        if (["done", "failed"].includes(payload.status as string)) void syncWorkflowJob(workflowJobId);
       } catch (error) {
         showBackendError("workflow event parse", error);
       }
     });
     source.onerror = () => {
-      void syncWorkflowJob(workflowJobId);
+      startPolling();
+    };
+    return () => {
+      active = false;
+      stopPolling();
       source.close();
     };
-    return () => source.close();
   }, [workflowJobId]);
 
   // —— 规则集（分组）——

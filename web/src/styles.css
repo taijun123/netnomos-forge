@@ -281,6 +281,17 @@ code,
   transform: translateY(-1px);
 }
 
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn:disabled:hover {
+  transform: none;
+}
+
 .btn-lg {
   min-height: 48px;
   padding: 0 26px;
@@ -1085,6 +1096,60 @@ code,
 
 .upload-note {
   margin: 18px 0 22px;
+}
+
+.upload-note.is-warning {
+  margin-bottom: 0;
+  color: #ffd166;
+}
+
+.upload-options {
+  margin-bottom: 20px;
+}
+
+.upload-option-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.upload-tab {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.upload-tab:hover {
+  border-color: rgba(79, 140, 255, 0.22);
+  background: rgba(79, 140, 255, 0.1);
+  color: var(--text);
+}
+
+.upload-tab.active {
+  border-color: rgba(79, 140, 255, 0.32);
+  background: rgba(79, 140, 255, 0.15);
+  color: var(--accent);
+}
+
+.custom-learning-source {
+  display: grid;
+  gap: 12px;
+}
+
+.upload-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
 }
 
 .visually-hidden {

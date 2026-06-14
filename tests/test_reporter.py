@@ -108,7 +108,7 @@ class TestFinanceDualReport(unittest.TestCase):
 
 
 class TestNetworkDualReport(unittest.TestCase):
-    """网络双轨：A 轨确定性带错样本 / B 轨预置合规样本（沙箱降级）."""
+    """网络双轨：A 轨确定性带错样本 / B 轨 LeJIT 或预置合规样本."""
 
     @classmethod
     def setUpClass(cls):
@@ -126,13 +126,49 @@ class TestNetworkDualReport(unittest.TestCase):
     def test_track_b_zero_violations_with_fallback_note(self):
         self.assertEqual(self.dual.track_b.violations, [])
         log_text = "\n".join(self.dual.track_b.intervention_log)
-        self.assertIn("sample_b.json", log_text)        # 沙箱降级路径说明
+        self.assertTrue(
+            "sample_b.json" in log_text or "LeJIT 约束解码生成" in log_text,
+            log_text,
+        )
         self.assertIn("0 违规", log_text)
 
     def test_sample_b_rows_compliant(self):
         rows = self.dual.track_b.slots["rows"]
         self.assertEqual(len(rows), 10)
         self.assertEqual(check_netflow_rows(rows), [])
+
+    def test_track_a_uses_supplied_rows_without_mock_replacement(self):
+        rows = [
+            {
+                "Proto": "UDP",
+                "SrcIpAddr": "192.168.220.8",
+                "SrcPt": 34358,
+                "DstIpAddr": "DNS",
+                "DstPt": 53,
+                "Packets": 2,
+                "Bytes": 164,
+                "Flags": "......",
+            },
+            {
+                "Proto": "TCP",
+                "SrcIpAddr": "192.168.220.16",
+                "SrcPt": 37922,
+                "DstIpAddr": "10082_43",
+                "DstPt": 443,
+                "Packets": 5,
+                "Bytes": 1100,
+                "Flags": ".AP.SF",
+            },
+        ]
+        dual = self.reporter.make_dual_network(
+            10,
+            track_a_rows=rows,
+            track_a_source_label="uploaded clean sample",
+        )
+        self.assertEqual(dual.track_a.slots["rows"], rows)
+        self.assertEqual(dual.track_a.violations, [])
+        self.assertEqual(len(dual.track_b.slots["rows"]), len(rows))
+        self.assertIn("uploaded clean sample", dual.track_a.markdown)
 
 
 if __name__ == "__main__":

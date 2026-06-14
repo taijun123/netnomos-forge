@@ -45,7 +45,7 @@ docs/*_render_test.*
 **/training_args.bin
 forge/rulesets/*/20*/
 forge/rulesets/*/generated*.csv
-forge/rulesets/*/sample_b.json
+# Required network_cidds B-track fallback sample is tracked.
 
 # Raw local data drops
 data/*.csv

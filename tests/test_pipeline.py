@@ -14,6 +14,7 @@ import tempfile
 import unittest
 from importlib.util import find_spec
 from pathlib import Path
+from unittest.mock import patch
 
 from forge.contracts import STAGE_AGENT, WorkflowEvent
 from server.pipeline import run_finance_pipeline, run_network_pipeline
@@ -136,6 +137,141 @@ class TestNetworkPipeline(unittest.TestCase):
     def test_ruleset_loaded(self):
         self.assertTrue(self.result["ruleset"].rules)
         self.assertTrue(self.result["cards"])
+
+    def test_validate_network_uses_uploaded_data_source(self):
+        import server.pipeline as pipeline
+        import server.store as storemod
+
+        old_store = storemod._STORE                  # noqa: SLF001
+        old_uploads_dir = pipeline.NETWORK_UPLOADS_DIR
+        storemod._STORE = storemod.JobStore()        # noqa: SLF001
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            upload_root = Path(tmpdir) / "network_cidds"
+            upload_root.mkdir(parents=True)
+            pipeline.NETWORK_UPLOADS_DIR = upload_root
+            uploaded_path = upload_root / "uploaded-netflow.csv"
+            uploaded_path.write_text(
+                "\n".join([
+                    "DateFirstSeen,Duration,Proto,SrcIpAddr,SrcPt,DstIpAddr,DstPt,Packets,Bytes,Flows,Flags,Tos",
+                    "2017-03-23 09:22:45.870,0.004,UDP,192.168.220.12,51413,DNS,53,2,196,1,.AP.SF,0",
+                    "2017-03-23 09:27:54.781,0.000,UDP,192.168.220.9,137,192.168.220.255,137,1,92,1,......,0",
+                ]),
+                encoding="utf-8",
+            )
+            try:
+                store = storemod.get_store()
+                data_source_id = store.put_data_source({
+                    "scenario": "network_cidds",
+                    "filename": uploaded_path.name,
+                    "path": str(uploaded_path),
+                    "size": uploaded_path.stat().st_size,
+                    "note": "test-upload",
+                })
+                job = store.create_job(
+                    "network_cidds",
+                    "validate-network",
+                    request_params={
+                        "dataSourceId": data_source_id,
+                        "validationDataSourceId": data_source_id,
+                    },
+                )
+                events: list[WorkflowEvent] = []
+                result = run_network_pipeline(job, events.append)
+
+                rows = result["dual"].track_a.slots["rows"]
+                self.assertEqual(len(rows), 2)
+                self.assertEqual(rows[0]["Flags"], ".AP.SF")
+                self.assertEqual({v.rule_id for v in result["violations"]}, {"N01"})
+                self.assertIn(uploaded_path.name, result["dual"].track_a.markdown)
+                descriptions = "\n".join(event.description for event in events)
+                self.assertIn(f"dataSourceId={data_source_id}", descriptions)
+            finally:
+                pipeline.NETWORK_UPLOADS_DIR = old_uploads_dir
+                storemod._STORE = old_store           # noqa: SLF001
+
+    def test_network_upload_rejects_wrong_scenario(self):
+        import server.pipeline as pipeline
+        import server.store as storemod
+
+        old_store = storemod._STORE                  # noqa: SLF001
+        old_uploads_dir = pipeline.NETWORK_UPLOADS_DIR
+        storemod._STORE = storemod.JobStore()        # noqa: SLF001
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            upload_root = Path(tmpdir) / "network_cidds"
+            upload_root.mkdir(parents=True)
+            pipeline.NETWORK_UPLOADS_DIR = upload_root
+            uploaded_path = upload_root / "wrong-scenario.csv"
+            uploaded_path.write_text(
+                "Proto,Packets,Bytes\nUDP,1,92\n",
+                encoding="utf-8",
+            )
+            try:
+                store = storemod.get_store()
+                data_source_id = store.put_data_source({
+                    "scenario": "finance_v1",
+                    "filename": uploaded_path.name,
+                    "path": str(uploaded_path),
+                    "size": uploaded_path.stat().st_size,
+                })
+                job = store.create_job(
+                    "network_cidds",
+                    "validate-network",
+                    request_params={"validationDataSourceId": data_source_id},
+                )
+                with self.assertRaises(RuntimeError) as ctx:
+                    run_network_pipeline(job, lambda _event: None)
+                self.assertIn("network_cidds", str(ctx.exception))
+            finally:
+                pipeline.NETWORK_UPLOADS_DIR = old_uploads_dir
+                storemod._STORE = old_store           # noqa: SLF001
+
+    def test_custom_network_learn_without_runtime_fails_clearly(self):
+        import server.pipeline as pipeline
+        import server.store as storemod
+
+        old_store = storemod._STORE                  # noqa: SLF001
+        old_uploads_dir = pipeline.NETWORK_UPLOADS_DIR
+        storemod._STORE = storemod.JobStore()        # noqa: SLF001
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            upload_root = Path(tmpdir) / "network_cidds"
+            upload_root.mkdir(parents=True)
+            pipeline.NETWORK_UPLOADS_DIR = upload_root
+            uploaded_path = upload_root / "training.csv"
+            uploaded_path.write_text(
+                "Proto,Packets,Bytes\nUDP,1,92\n",
+                encoding="utf-8",
+            )
+            try:
+                store = storemod.get_store()
+                data_source_id = store.put_data_source({
+                    "scenario": "network_cidds",
+                    "filename": uploaded_path.name,
+                    "path": str(uploaded_path),
+                    "size": uploaded_path.stat().st_size,
+                })
+                job = store.create_job(
+                    "network_cidds",
+                    "learn-network",
+                    request_params={
+                        "dataSourceId": data_source_id,
+                        "trainingDataSourceId": data_source_id,
+                    },
+                )
+                events: list[WorkflowEvent] = []
+                with patch("server.pipeline.find_spec", return_value=None):
+                    with self.assertRaises(RuntimeError) as ctx:
+                        run_network_pipeline(job, events.append)
+                self.assertIn("NetNomos runtime", str(ctx.exception))
+                self.assertTrue(any(
+                    event.stage == "learn" and event.status == "blocked"
+                    for event in events
+                ))
+            finally:
+                pipeline.NETWORK_UPLOADS_DIR = old_uploads_dir
+                storemod._STORE = old_store           # noqa: SLF001
 
 
 class TestServerApp(unittest.TestCase):

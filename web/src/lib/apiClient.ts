@@ -64,7 +64,30 @@ export interface ConstrainedChatResult {
   backend?: string;
 }
 
-const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
+function stripTrailingSlashes(value: string): string {
+  return value.replace(/\/+$/, "");
+}
+
+function normalizeApiBase(value: string | undefined): string {
+  const trimmed = stripTrailingSlashes((value ?? "").trim());
+  if (!trimmed) return "";
+
+  try {
+    const url = new URL(trimmed);
+    if (url.hostname === "localhost" || url.hostname === "::1" || url.hostname === "[::1]") {
+      url.hostname = "127.0.0.1";
+    }
+    return stripTrailingSlashes(url.toString());
+  } catch {
+    return trimmed
+      .replace(/^(https?:\/\/)localhost(?=[:/]|$)/i, (_match, scheme: string) => `${scheme}127.0.0.1`)
+      .replace(/^(https?:\/\/)\[::1\](?=[:/]|$)/i, (_match, scheme: string) => `${scheme}127.0.0.1`)
+      .replace(/^(\/\/)localhost(?=[:/]|$)/i, (_match, prefix: string) => `${prefix}127.0.0.1`)
+      .replace(/^localhost(?=[:/]|$)/i, "127.0.0.1");
+  }
+}
+
+const API_BASE = normalizeApiBase(import.meta.env.VITE_API_BASE);
 
 const SEQUENCE_SCENARIO: Record<MockSequenceId, Scenario> = {
   "learn-network": "network_cidds",

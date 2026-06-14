@@ -47,6 +47,8 @@ export function NetworkDemoPage() {
   const [validationResult, setValidationResult] = useState<WorkflowJobResult | null>(null);
   const [dualResult, setDualResult] = useState<WorkflowJobResult | null>(null);
   const [validationSource, setValidationSource] = useState<UploadedDataSource | null>(null);
+  const [learningSource, setLearningSource] = useState<UploadedDataSource | null>(null);
+  const [useBuiltInLearning, setUseBuiltInLearning] = useState(true);
   const [demoError, setDemoError] = useState<string | null>(null);
 
   // 一键演示：自动驱动整条网络流程
@@ -68,6 +70,8 @@ export function NetworkDemoPage() {
     (async () => {
       try {
         setDemoError(null);
+        setUseBuiltInLearning(true);
+        setLearningSource(null);
         setStep("upload");
         await delay(DEMO_PACING.stepBeat);
         setStep("learn"); // WorkflowLog 挂载即自动跑
@@ -118,6 +122,40 @@ export function NetworkDemoPage() {
         ? validationResult.dual.track_a.violations
         : [];
   const validationSourceLabel = formatUploadedSource(validationSource);
+  const canStartLearning = useBuiltInLearning || Boolean(learningSource);
+  const learnRequestPayload: WorkflowStartPayload =
+    !useBuiltInLearning && learningSource
+      ? {
+          dataSourceId: learningSource.dataSourceId,
+          trainingDataSourceId: learningSource.dataSourceId,
+        }
+      : {};
+
+  const handleLearningSourceChange = (source: UploadedDataSource) => {
+    const previousLearningSourceId = learningSource?.dataSourceId;
+    setLearningSource(source);
+    setLiveResult(null);
+    setValidationResult(null);
+    setDualResult(null);
+    if (previousLearningSourceId) {
+      setValidationSource((current) =>
+        current?.dataSourceId === previousLearningSourceId ? null : current
+      );
+    }
+  };
+
+  const clearLearningData = () => {
+    const learningSourceId = learningSource?.dataSourceId;
+    setLearningSource(null);
+    setLiveResult(null);
+    setValidationResult(null);
+    setDualResult(null);
+    if (learningSourceId) {
+      setValidationSource((current) =>
+        current?.dataSourceId === learningSourceId ? null : current
+      );
+    }
+  };
 
   return (
     <div className="demo-layout">
@@ -130,17 +168,33 @@ export function NetworkDemoPage() {
             一键演示已停止，未使用本地模拟结果：{demoError}
           </div>
         )}
-        {step === "upload" && <UploadStep onNext={() => setStep("learn")} />}
-        {step === "learn" && (
-          <WorkflowLog
-            sequence="learn-network"
-            title="规则学习 · 事件流"
-            onResult={(result) => {
-              setLiveResult(result);
-              gatesRef.current?.learn.resolve(result);
-            }}
-            onError={(err) => gatesRef.current?.learn.reject(err)}
+        {step === "upload" && (
+          <UploadStep
+            useBuiltIn={useBuiltInLearning}
+            learningSource={learningSource}
+            canStartLearning={canStartLearning}
+            onUseBuiltInChange={setUseBuiltInLearning}
+            onLearningSourceChange={handleLearningSourceChange}
+            onClear={clearLearningData}
+            onNext={() => setStep("learn")}
           />
+        )}
+        {step === "learn" && (
+          canStartLearning ? (
+            <WorkflowLog
+              key={useBuiltInLearning ? "built-in-network" : learningSource?.dataSourceId}
+              sequence="learn-network"
+              title="规则学习 · 事件流"
+              requestPayload={learnRequestPayload}
+              onResult={(result) => {
+                setLiveResult(result);
+                gatesRef.current?.learn.resolve(result);
+              }}
+              onError={(err) => gatesRef.current?.learn.reject(err)}
+            />
+          ) : (
+            <MissingLearningSourceState onBack={() => setStep("upload")} />
+          )
         )}
         {step === "cards" && (
           ruleCards.length > 0
@@ -269,33 +323,113 @@ function EmptyLiveState({ title, detail }: { title: string; detail: string }) {
   );
 }
 
-function UploadStep({ onNext }: { onNext: () => void }) {
+function UploadStep({
+  useBuiltIn,
+  learningSource,
+  canStartLearning,
+  onUseBuiltInChange,
+  onLearningSourceChange,
+  onClear,
+  onNext,
+}: {
+  useBuiltIn: boolean;
+  learningSource: UploadedDataSource | null;
+  canStartLearning: boolean;
+  onUseBuiltInChange: (useBuiltIn: boolean) => void;
+  onLearningSourceChange: (source: UploadedDataSource) => void;
+  onClear: () => void;
+  onNext: () => void;
+}) {
   return (
     <div className="upload-step glass">
-      <div className="upload-drop">
-        <span className="upload-icon">⇪</span>
-        <strong>cidds_wk2_normal_10k.csv</strong>
-        <em>10,000 行正常 NetFlow · 已加载（演示数据）</em>
+      <div className="upload-options">
+        <div className="upload-option-tabs" role="tablist" aria-label="规则学习数据源">
+          <button
+            type="button"
+            className={`upload-tab ${useBuiltIn ? "active" : ""}`}
+            onClick={() => onUseBuiltInChange(true)}
+            role="tab"
+            aria-selected={useBuiltIn}
+          >
+            使用内置数据
+          </button>
+          <button
+            type="button"
+            className={`upload-tab ${!useBuiltIn ? "active" : ""}`}
+            onClick={() => onUseBuiltInChange(false)}
+            role="tab"
+            aria-selected={!useBuiltIn}
+          >
+            上传自定义数据
+          </button>
+        </div>
       </div>
-      <div className="upload-meta">
-        <div>
-          <span>记录数</span>
-          <strong>10,000</strong>
+
+      {useBuiltIn ? (
+        <>
+          <div className="upload-drop">
+            <span className="upload-icon">⇪</span>
+            <strong>cidds_wk2_normal_10k.csv</strong>
+            <em>10,000 行正常 NetFlow · 已加载（演示数据）</em>
+          </div>
+          <div className="upload-meta">
+            <div>
+              <span>记录数</span>
+              <strong>10,000</strong>
+            </div>
+            <div>
+              <span>字段</span>
+              <strong>Proto / SrcPt / Packets / Bytes / Flags …</strong>
+            </div>
+            <div>
+              <span>用途</span>
+              <strong>规则自发现训练集</strong>
+            </div>
+          </div>
+          <p className="upload-note">
+            规则学习使用内置正常流量；复用核查阶段请在“新资料核查”步骤手工上传待核查流量文件。
+          </p>
+        </>
+      ) : (
+        <div className="custom-learning-source">
+          <DataSourceUploadBox
+            scenario="network_cidds"
+            title="选择规则学习数据"
+            description="上传用于规则学习的 NetFlow 数据文件。上传后 learn-network 会同时携带 dataSourceId 与 trainingDataSourceId。"
+            accept=".csv,.json,.txt"
+            note="network-learning-data"
+            uploaded={learningSource}
+            onUploaded={onLearningSourceChange}
+          />
+          {!learningSource && (
+            <p className="upload-note is-warning">
+              上传自定义数据后才能开始规则学习；不会静默回退到内置训练集。
+            </p>
+          )}
         </div>
-        <div>
-          <span>字段</span>
-          <strong>Proto / SrcPt / Packets / Bytes / Flags …</strong>
-        </div>
-        <div>
-          <span>用途</span>
-          <strong>规则自发现训练集</strong>
-        </div>
+      )}
+
+      <div className="upload-actions">
+        <button className="btn btn-primary" disabled={!canStartLearning} onClick={onNext}>
+          {canStartLearning ? "开始规则学习 →" : "请先上传自定义数据"}
+        </button>
+        <button className="btn btn-outline" type="button" onClick={onClear}>
+          清空数据
+        </button>
       </div>
-      <p className="upload-note">
-        规则学习使用内置正常流量；复用核查阶段请在“新资料核查”步骤手工上传待核查流量文件。
+    </div>
+  );
+}
+
+function MissingLearningSourceState({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="empty-live-state glass">
+      <h3>请先上传规则学习数据</h3>
+      <p>
+        当前已选择“上传自定义数据”，但还没有 dataSourceId。规则学习不会静默改用内置数据。
       </p>
-      <button className="btn btn-primary" onClick={onNext}>
-        开始规则学习 →
+      <button className="btn btn-primary" type="button" onClick={onBack}>
+        返回上传自定义数据
       </button>
     </div>
   );

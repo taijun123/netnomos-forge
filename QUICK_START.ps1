@@ -44,7 +44,7 @@ if (Test-Path "$WebDir\package.json") {
         Write-Host "  npm install..." -ForegroundColor DarkGray
         npm install --prefix $WebDir
     }
-    $env:VITE_API_BASE = "http://localhost:8000"
+    $env:VITE_API_BASE = "http://127.0.0.1:8000"
     Start-Job -ScriptBlock {
         param($w)
         Set-Location $w
@@ -59,8 +59,8 @@ if (Test-Path "$WebDir\package.json") {
 Write-Host ""
 Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host "  演示就绪 (mock 模式)" -ForegroundColor Cyan
-Write-Host "  前端: http://localhost:5173" -ForegroundColor Cyan
-Write-Host "  API:  http://localhost:8000/docs" -ForegroundColor Cyan
+Write-Host "  前端: http://127.0.0.1:5173" -ForegroundColor Cyan
+Write-Host "  API:  http://127.0.0.1:8000/docs" -ForegroundColor Cyan
 Write-Host "  停止: Get-Job | Stop-Job | Remove-Job" -ForegroundColor Cyan
 Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host ""
