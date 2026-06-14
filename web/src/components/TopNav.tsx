@@ -23,12 +23,10 @@ export function TopNav({
   return (
     <header className="topnav">
       <button className="topnav-brand" onClick={() => onNavigate("intro")}>
-        <span className="brand-mark" aria-hidden>
-          NN
-        </span>
+        <img className="brand-logo" src="/assets/netnomos-forge-logo.png" alt="" aria-hidden="true" />
         <span className="brand-text">
           <strong>NetNomos Forge</strong>
-          <em>不改模型，只加规则</em>
+          <em>规则约束 AI 生成</em>
         </span>
       </button>
       <nav className="topnav-items">

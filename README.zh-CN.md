@@ -1,5 +1,7 @@
 # NetNomos Forge
 
+[English](README.md) | [中文](README.zh-CN.md)
+
 NetNomos Forge 是一个把 **NetNomos 规则自发现**、**LeJIT 约束生成**、**RAG 规则解释** 和 **A/B 双轨合规报告** 串成产品演示链路的工程。
 
 项目目标不是修改基础模型，而是在模型外侧建立一套可审计、可解释、可复用的规则控制层：从数据中发现规则，解释规则，核查新资料，并对比“裸模型输出”和“规则约束输出”的差异。
@@ -9,7 +11,10 @@ NetNomos Forge 是一个把 **NetNomos 规则自发现**、**LeJIT 约束生成*
 - **网络流量**：CIDDS/NetFlow 规则自发现、规则卡解释、新资料核查、A/B 约束生成对比。
 - **财务报表**：合成财务训练数据、华信咨询错误注入资料包、勾稽核查、数值投影修正、A/B 报告对比。
 
-English README: [README.md](README.md)
+## 文档入口
+
+- [项目架构说明](framework.md)：介绍 Web 前端、FastAPI 后端、核心 SDK、NetNomos、LeJIT、RAG/LLM 和场景工作流。
+- [本地运行指南](LOCAL_RUN_GUIDE.md)：从 clone/pull 仓库到本地启动后端、前端和 demo 的详细步骤。
 
 ## 项目展示的能力
 
@@ -58,23 +63,27 @@ netnomos-forge/
 │   └── rulesets/                  学习产物、golden 规则、LeJIT bundle
 ├── server/                        FastAPI 编排器、SSE job、内存 store
 ├── web/                           React/Vite 产品演示界面
+├── NetNomos/                      随仓库携带的 NetNomos 源码依赖
+├── LeJIT/                         随仓库携带的 LeJIT 源码依赖
 ├── demo_artifacts/                演示上传资产、上传文件、报告产物
-├── docs/                          API 文档、W4 演示脚本、项目报告
 ├── scripts/                       验证脚本和宿主机辅助脚本
 ├── tests/                         Python 测试
-└── agents/                        多 Agent 协作说明/配置
+└── ...
 ```
 
-推荐工作区结构：
+推荐检出结构：
 
 ```text
 model_control/
-├── NetNomos/
-├── LeJIT/
 └── netnomos-forge/
+    ├── NetNomos/
+    ├── LeJIT/
+    ├── forge/
+    ├── server/
+    └── web/
 ```
 
-`pyproject.toml` 通过本地 editable dependency 引用 `../NetNomos` 和 `../LeJIT`。
+`pyproject.toml` 通过本地 editable dependency 引用仓库内的 `NetNomos` 和 `LeJIT`。
 
 ## 演示资产
 

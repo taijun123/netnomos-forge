@@ -1,7 +1,7 @@
 [dataset]
-dataset_spec = "E:/yanchh/model_control/netnomos-forge/forge/scenarios/network_cidds/dataset_spec.json"
-input_path = "E:/yanchh/model_control/NetNomos/data/cidds_wk2_normal_10k.csv"
-rules_path = "E:/yanchh/model_control/netnomos-forge/forge/rulesets/network_cidds/golden/rules.json"
+dataset_spec = "../../scenarios/network_cidds/dataset_spec.json"
+input_path = "../../../NetNomos/data/cidds_wk2_normal_10k.csv"
+rules_path = "golden/rules.json"
 
 [model]
 mode = "config"

@@ -1,7 +1,7 @@
 {
   "dataset": {
     "dataset_spec": "dataset_spec.json",
-    "input_path": "E:\\yanchh\\model_control\\NetNomos\\data\\cidds_wk2_normal_10k.csv",
+    "input_path": "../../../../NetNomos/data/cidds_wk2_normal_10k.csv",
     "limit": null,
     "rules_path": "rules.json"
   },

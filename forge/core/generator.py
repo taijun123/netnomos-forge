@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """forge.core.generator — ConstrainedGenerator（实现 contracts.GeneratorAPI）.
 
-封装 LeJIT（github 同级目录 ../LeJIT）的受约束行生成：
+封装仓库内 LeJIT 源码目录的受约束行生成：
 - train()：优先走 Python API（lejit.config.LeJITConfig + lejit.pipeline.LeJITPipeline，
   与 lejit/cli.py 完全相同的入口），lejit/torch 不可导入时降级为
   ``uv run lejit train --config ... --output ...`` 子进程（在 LeJIT 仓库目录执行）；
@@ -23,10 +23,10 @@ from forge.contracts import RuleSet, Scenario, SCENARIO_DIR
 
 log = logging.getLogger("forge.core.generator")
 
-# 目录约定：netnomos-forge 与 LeJIT 同级
+# 目录约定：LeJIT 随本仓库放在 netnomos-forge/LeJIT
 FORGE_ROOT = Path(__file__).resolve().parents[2]          # netnomos-forge/
 RULESETS_DIR = FORGE_ROOT / "forge" / "rulesets"
-LEJIT_DIR = FORGE_ROOT.parent / "LeJIT"                    # <workspace>/LeJIT
+LEJIT_DIR = FORGE_ROOT / "LeJIT"
 
 # 子进程训练超时（秒）；CPU 小模型 3 epoch 量级，宿主机 GPU 远快于此
 SUBPROCESS_TIMEOUT = 60 * 60
@@ -34,7 +34,7 @@ SUBPROCESS_TIMEOUT = 60 * 60
 _LEJIT_HINT = (
     "无法运行 LeJIT：Python API（lejit/torch/transformers）不可导入，且 `uv run lejit` "
     "子进程不可用。沙箱无外网 pip，无法安装 torch，请在宿主机操作：\n"
-    "  1. cd <workspace>/LeJIT && uv sync\n"
+    "  1. cd <workspace>/netnomos-forge/LeJIT && uv sync\n"
     "  2. 执行 scripts/host/train_network_lejit.ps1 训练，"
     "scripts/host/generate_network.ps1 生成；\n"
     "  3. 或在宿主机 Python 中直接调用 ConstrainedGenerator.train(...)。"
@@ -185,7 +185,8 @@ class ConstrainedGenerator:
         log.info("LeJIT 子进程训练：%s（cwd=%s）", " ".join(cmd), LEJIT_DIR)
         try:
             proc = subprocess.run(cmd, cwd=LEJIT_DIR, capture_output=True,
-                                  text=True, timeout=SUBPROCESS_TIMEOUT)
+                                  text=True, encoding="utf-8", errors="replace",
+                                  timeout=SUBPROCESS_TIMEOUT)
         except subprocess.TimeoutExpired as exc:
             raise RuntimeError(f"LeJIT 训练子进程超时（>{SUBPROCESS_TIMEOUT}s）") from exc
         if proc.returncode != 0:

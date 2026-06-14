@@ -11,6 +11,11 @@ export interface WorkflowJobResult {
   violations?: Violation[];
   request?: WorkflowStartPayload;
   requestParams?: WorkflowStartPayload;
+  dataSourceId?: string;
+  trainingDataSourceId?: string;
+  validationDataSourceId?: string;
+  data_source?: WorkflowResultDataSources;
+  dataSource?: WorkflowResultDataSources;
 }
 
 export interface WorkflowJobStatus {
@@ -21,6 +26,8 @@ export interface WorkflowJobStatus {
   status: "pending" | "running" | "done" | "failed";
   createdAt?: number;
   created_at?: number;
+  request?: WorkflowStartPayload;
+  requestParams?: WorkflowStartPayload;
   events: WorkflowEvent[];
   result: WorkflowJobResult | null;
   error?: string | null;
@@ -39,6 +46,26 @@ export interface WorkflowStartPayload {
   validationDataSourceId?: string;
   question?: string;
   reportPrompt?: string;
+}
+
+export interface WorkflowResultDataSourceRef {
+  id?: string;
+  dataSourceId?: string;
+  filename?: string;
+  name?: string;
+}
+
+export interface WorkflowResultDataSources {
+  training?: WorkflowResultDataSourceRef | string | null;
+  validation?: WorkflowResultDataSourceRef | string | null;
+  primary?: WorkflowResultDataSourceRef | string | null;
+  [key: string]: WorkflowResultDataSourceRef | string | null | undefined;
+}
+
+export interface WorkflowDataSourceUsage {
+  request: Pick<WorkflowStartPayload, "dataSourceId" | "trainingDataSourceId" | "validationDataSourceId">;
+  requestIds: string[];
+  resultRefs: Array<{ purpose: string; id: string; filename?: string }>;
 }
 
 export interface UploadedDataSourceRecord extends DataSourceUploadResult {
@@ -62,6 +89,12 @@ export interface ConstrainedChatResult {
   checks?: string[];
   flagged_numbers?: string[];
   backend?: string;
+  jobId?: string;
+  dataSourceId?: string;
+  dualTitle?: string;
+  trackAMarkdown?: string;
+  trackBMarkdown?: string;
+  interventionLog?: string[];
 }
 
 function stripTrailingSlashes(value: string): string {
@@ -135,6 +168,98 @@ export function workflowPayloadFromLatestDataSource(
         dataSourceId: dataSource.dataSourceId,
         validationDataSourceId: dataSource.dataSourceId,
       };
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" ? value as Record<string, unknown> : null;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function dataSourcePayloadFrom(value: unknown): WorkflowDataSourceUsage["request"] {
+  const record = asRecord(value);
+  if (!record) return {};
+  return {
+    dataSourceId: stringValue(record.dataSourceId),
+    trainingDataSourceId: stringValue(record.trainingDataSourceId),
+    validationDataSourceId: stringValue(record.validationDataSourceId),
+  };
+}
+
+function mergeDataSourcePayloads(
+  ...payloads: Array<WorkflowDataSourceUsage["request"]>
+): WorkflowDataSourceUsage["request"] {
+  return payloads.reduce<WorkflowDataSourceUsage["request"]>(
+    (merged, payload) => ({
+      dataSourceId: payload.dataSourceId ?? merged.dataSourceId,
+      trainingDataSourceId: payload.trainingDataSourceId ?? merged.trainingDataSourceId,
+      validationDataSourceId: payload.validationDataSourceId ?? merged.validationDataSourceId,
+    }),
+    {}
+  );
+}
+
+function appendResultRef(
+  refs: WorkflowDataSourceUsage["resultRefs"],
+  purpose: string,
+  value: unknown
+) {
+  if (!value) return;
+  if (typeof value === "string") {
+    if (value.trim()) refs.push({ purpose, id: value });
+    return;
+  }
+  const record = asRecord(value);
+  if (!record) return;
+  const id = stringValue(record.dataSourceId) ?? stringValue(record.id);
+  if (!id) return;
+  refs.push({
+    purpose,
+    id,
+    filename: stringValue(record.filename) ?? stringValue(record.name),
+  });
+}
+
+export function collectWorkflowDataSourceUsage(
+  jobOrResult: WorkflowJobStatus | WorkflowJobResult | null | undefined
+): WorkflowDataSourceUsage {
+  const root = asRecord(jobOrResult);
+  const result = asRecord(root?.result) ?? root;
+  const request = mergeDataSourcePayloads(
+    dataSourcePayloadFrom(result?.request),
+    dataSourcePayloadFrom(result?.requestParams),
+    dataSourcePayloadFrom(root?.request),
+    dataSourcePayloadFrom(root?.requestParams),
+    dataSourcePayloadFrom(result)
+  );
+  const requestIds = Array.from(new Set([
+    request.dataSourceId,
+    request.trainingDataSourceId,
+    request.validationDataSourceId,
+  ].filter((id): id is string => Boolean(id))));
+
+  const resultRefs: WorkflowDataSourceUsage["resultRefs"] = [];
+  appendResultRef(resultRefs, "result", result?.dataSourceId);
+  appendResultRef(resultRefs, "training", result?.trainingDataSourceId);
+  appendResultRef(resultRefs, "validation", result?.validationDataSourceId);
+  const dataSources = asRecord(result?.data_source) ?? asRecord(result?.dataSource);
+  if (dataSources) {
+    Object.entries(dataSources).forEach(([purpose, value]) => appendResultRef(resultRefs, purpose, value));
+  }
+
+  const seen = new Set<string>();
+  return {
+    request,
+    requestIds,
+    resultRefs: resultRefs.filter((ref) => {
+      const key = `${ref.purpose}:${ref.id}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }),
+  };
 }
 
 function summarizeBody(body: BodyInit | null | undefined): unknown {
@@ -296,21 +421,26 @@ export async function startOfficeWorkflow(
 
 export async function sendConstrainedChatMessage(payload: {
   conversationId: string;
+  scenario?: Scenario;
   rulesetId?: string;
   message: string;
   systemPrompt?: string;
   ragFiles?: string[];
+  dataSourceId?: string;
+  validationDataSourceId?: string;
 }): Promise<ConstrainedChatResult> {
   return requestJson<ConstrainedChatResult>(API.CHAT_CONSTRAINED, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      scenario: "office_demo" satisfies Scenario,
+      scenario: payload.scenario ?? ("office_demo" satisfies Scenario),
       conversationId: payload.conversationId,
       rulesetId: payload.rulesetId,
       message: payload.message,
       systemPrompt: payload.systemPrompt,
       ragFiles: payload.ragFiles ?? [],
+      dataSourceId: payload.dataSourceId,
+      validationDataSourceId: payload.validationDataSourceId,
     }),
   });
 }

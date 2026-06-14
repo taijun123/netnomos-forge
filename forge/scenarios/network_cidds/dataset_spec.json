@@ -3,7 +3,7 @@
   "description": "CIDDS week-2 normal NetFlow 10k（netnomos-forge 网络场景，字段/预处理沿用 NetNomos examples/datasets/cidds.json）",
   "source": {
     "type": "csv",
-    "path": "../../../../NetNomos/data/cidds_wk2_normal_10k.csv"
+    "path": "../../../NetNomos/data/cidds_wk2_normal_10k.csv"
   },
   "fields": [
     {

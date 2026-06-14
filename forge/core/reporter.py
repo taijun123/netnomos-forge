@@ -17,9 +17,9 @@
 网络场景（network_cidds）：
 - track_a_network()：llm 生成 10 条 NetFlow；mock 时用确定性"带错样本"
   （错误类型：UDP 带 TCP Flags / Packets×65535 < Bytes / 端口 53 非 DNS 身份）。
-- track_b_network()：优先调 ConstrainedGenerator（LeJIT bundle）；沙箱不可用
-  时降级读预置合规样本 forge/rulesets/network_cidds/sample_b.json
-  （人工构造，待宿主机 LeJIT 实跑替换，见该文件 meta.source_zh）。
+- track_b_network()：优先调 ConstrainedGenerator（LeJIT bundle）；对生成行做
+  终检过滤并补采，直到拿到足量 0 违规记录。若 LeJIT 不可用或补采不足，
+  直接暴露错误，不用静态样本伪装成功。
 
 修正/槽位全部从 ViolationReport 与 DataFrame 推导，不 hardcode 公司数值。
 """
@@ -27,7 +27,10 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
+import subprocess
+import sys
 import time
 import uuid
 from pathlib import Path
@@ -46,7 +49,8 @@ log = logging.getLogger("forge.core.reporter")
 
 FORGE_DIR = Path(__file__).resolve().parents[1]
 FIN_TEMPLATE_PATH = SCENARIO_DIR / "finance_v1" / "report_template.md"
-NET_SAMPLE_B_PATH = FORGE_DIR / "rulesets" / "network_cidds" / "sample_b.json"
+FORGE_ROOT = FORGE_DIR.parent
+LEJIT_SUBPROCESS_TIMEOUT = 180
 
 # 行业英文 → 中文
 INDUSTRY_ZH = {"consulting": "咨询", "retail": "零售", "manufacturing": "制造"}
@@ -168,6 +172,20 @@ def check_netflow_rows(rows: list[dict[str, Any]]) -> list[Violation]:
     return violations
 
 
+def _split_valid_netflow_rows(
+    rows: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[Violation]]:
+    valid: list[dict[str, Any]] = []
+    rejected: list[Violation] = []
+    for row in rows:
+        row_violations = check_netflow_rows([row])
+        if row_violations:
+            rejected.extend(row_violations)
+        else:
+            valid.append(row)
+    return valid, rejected
+
+
 def mock_netflow_with_errors(n: int = 10) -> list[dict[str, Any]]:
     """确定性"带错"NetFlow 样本（A 轨 mock 降级）.
 
@@ -233,6 +251,38 @@ def _rows_to_md_table(rows: list[dict[str, Any]],
         lines.append("| " + " | ".join(
             [str(i + 1)] + [str(row.get(c, "")) for c in cols]) + " |")
     return "\n".join(lines)
+
+
+def _generate_network_rows_in_subprocess(n: int) -> list[dict[str, Any]]:
+    code = (
+        "import json;"
+        "from forge.core.generator import ConstrainedGenerator;"
+        f"rows = ConstrainedGenerator.from_bundle('network_cidds').generate({n!r});"
+        "print(json.dumps(rows, ensure_ascii=False))"
+    )
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["CUDA_VISIBLE_DEVICES"] = ""
+    proc = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=FORGE_ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=LEJIT_SUBPROCESS_TIMEOUT,
+        env=env,
+    )
+    if proc.returncode != 0:
+        tail = (proc.stderr or proc.stdout)[-1200:]
+        raise RuntimeError(f"LeJIT 子进程退出码 {proc.returncode}: {tail}")
+    try:
+        payload = json.loads((proc.stdout or "").strip().splitlines()[-1])
+    except Exception as exc:
+        raise RuntimeError(f"LeJIT 子进程输出无法解析: {(proc.stdout or '')[-500:]}") from exc
+    if not isinstance(payload, list) or not all(isinstance(row, dict) for row in payload):
+        raise RuntimeError("LeJIT 子进程未返回行对象列表")
+    return payload
 
 
 # ---------------------------------------------------------------------------
@@ -701,45 +751,83 @@ class DualReporter:
             return None
 
     def track_b_network(self, n: int = 10, generator=None) -> TrackReport:
-        """B 轨：ConstrainedGenerator（LeJIT）生成；沙箱降级读预置合规样本."""
+        """B 轨：LeJIT 生成后终检过滤并补采，不用静态样本伪装成功."""
         rows: list[dict[str, Any]] | None = None
+        valid_rows: list[dict[str, Any]] = []
         logbook: list[str] = []
+
+        def collect_candidates(candidates: list[dict[str, Any]], source: str) -> None:
+            valid, rejected = _split_valid_netflow_rows(candidates)
+            if rejected:
+                logbook.append(
+                    f"{source} 终检剔除 {len(rejected)} 条不合规记录，"
+                    f"保留 {len(valid)} 条。"
+                )
+            valid_rows.extend(valid)
+
         gen = generator
         if gen is None:
             try:
                 from forge.core.generator import ConstrainedGenerator  # noqa: PLC0415
                 gen = ConstrainedGenerator.from_bundle("network_cidds")
             except Exception as exc:
-                logbook.append(f"LeJIT bundle 不可用（{exc}），降级读取预置合规样本。")
+                logbook.append(f"LeJIT bundle 不可用（{exc}），改用隔离子进程重试。")
                 gen = None
+        max_attempts = 8
         if gen is not None:
             try:
-                rows = gen.generate(n)
-                logbook.append(f"LeJIT 约束解码生成 {len(rows)} 条记录"
+                candidates = gen.generate(n)
+                logbook.append(f"LeJIT 约束解码生成 {len(candidates)} 条记录"
                                f"（每步经 Z3 过滤，构造性满足规则）。")
+                collect_candidates(candidates, "LeJIT")
+                for attempt in range(max_attempts):
+                    if len(valid_rows) >= n:
+                        break
+                    need = max(n, (n - len(valid_rows)) * 4)
+                    extra = gen.generate(need)
+                    logbook.append(
+                        f"LeJIT 补采第 {attempt + 1} 轮生成 {len(extra)} 条记录。"
+                    )
+                    collect_candidates(extra, "LeJIT 补采")
             except Exception as exc:
-                logbook.append(f"LeJIT 生成失败（{exc}），降级读取预置合规样本。")
-                rows = None
-        if rows is None:
-            payload = json.loads(NET_SAMPLE_B_PATH.read_text(encoding="utf-8"))
-            rows = payload["rows"][:n]
+                logbook.append(f"LeJIT 同进程生成失败（{exc}），改用隔离子进程重试。")
+        if len(valid_rows) < n:
+            try:
+                for attempt in range(max_attempts):
+                    if len(valid_rows) >= n:
+                        break
+                    need = max(n, (n - len(valid_rows)) * 5)
+                    candidates = _generate_network_rows_in_subprocess(need)
+                    logbook.append(
+                        f"LeJIT 隔离子进程第 {attempt + 1} 轮生成 {len(candidates)} 条记录。"
+                    )
+                    collect_candidates(candidates, "LeJIT 隔离子进程")
+            except Exception as sub_exc:
+                logbook.append(
+                    f"LeJIT 子进程生成失败（{sub_exc}），终止本次 B 轨生成。"
+                )
+        if len(valid_rows) >= n:
+            rows = valid_rows[:n]
             logbook.append(
-                "使用预置合规样本 forge/rulesets/network_cidds/sample_b.json"
-                "（人工构造、规则零违规；待宿主机 LeJIT 实跑替换，"
-                "见该文件 meta.source_zh）。")
+                f"LeJIT 终检后获得 {len(rows)} 条合规记录（全程使用 LeJIT 筛选结果）。"
+            )
+        else:
+            raise RuntimeError(
+                f"LeJIT 终检过滤后仅获得 {len(valid_rows)}/{n} 条合规记录，"
+                "拒绝使用静态样本伪装成功。"
+            )
         violations = check_netflow_rows(rows)
         for v in violations:    # 理论上为空；若 LeJIT 输出异常在此兜底记录
             logbook.append(f"【告警】B 轨记录违规：{v.message_zh}")
         if violations:
-            payload = json.loads(NET_SAMPLE_B_PATH.read_text(encoding="utf-8"))
-            rows = payload["rows"][:n]
-            logbook.append(
-                "B 轨终检发现 LeJIT 输出仍有违规，已回退到归档的 0 违规合规样本，"
-                "保证演示报告不放行错误记录。")
-            violations = check_netflow_rows(rows)
+            raise RuntimeError(
+                "B 轨终检发现已筛选 LeJIT 记录仍有违规，拒绝使用静态样本伪装成功。"
+            )
         if not violations:
-            logbook.append("B 轨终检：10 条记录全部通过协议/物理/身份规则核查，0 违规。")
-        md = ("## B 轨 · 规则约束生成的 NetFlow（10 条）\n\n"
+            logbook.append(
+                f"B 轨终检：{len(rows)} 条记录全部通过协议/物理/身份规则核查，0 违规。"
+            )
+        md = (f"## B 轨 · 规则约束生成的 NetFlow（{len(rows)} 条）\n\n"
               + _rows_to_md_table(rows) + "\n\n### 规则核查\n\n- ✅ 0 违规")
         return TrackReport(track="B", markdown=md,
                            slots={"rows": rows}, violations=violations,

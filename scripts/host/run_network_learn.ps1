@@ -1,6 +1,6 @@
 # run_network_learn.ps1 — 宿主机一键：NetNomos uv sync → netn learn（cidds）→ 归档黄金规则集
 # 用法：powershell -ExecutionPolicy Bypass -File scripts\host\run_network_learn.ps1
-# 目录约定：<workspace>\netnomos-forge 与 <workspace>\NetNomos 同级
+# 目录约定：NetNomos 随本仓库放在 netnomos-forge 根目录下
 param(
     [string]$Learner = "hitting-set",          # hitting-set | tree
     [int]$Limit = 0,                            # 0 = 全量 10k 行
@@ -9,14 +9,13 @@ param(
 $ErrorActionPreference = "Stop"
 
 $ForgeRoot = (Resolve-Path "$PSScriptRoot\..\..").Path          # netnomos-forge\
-$Workspace = (Resolve-Path "$ForgeRoot\..").Path                 # <workspace>\
-$NetNomos  = Join-Path $Workspace "NetNomos"
+$NetNomos  = Join-Path $ForgeRoot "NetNomos"
 $ScenDir   = Join-Path $ForgeRoot "forge\scenarios\network_cidds"
 $DataCsv   = Join-Path $NetNomos "data\cidds_wk2_normal_10k.csv"
 $RunsDir   = Join-Path $ForgeRoot "forge\rulesets\network_cidds\runs"
 $GoldenDir = Join-Path $ForgeRoot "forge\rulesets\network_cidds\golden"
 
-if (-not (Test-Path $NetNomos)) { throw "未找到 NetNomos 仓库：$NetNomos（需与 netnomos-forge 同级）" }
+if (-not (Test-Path $NetNomos)) { throw "未找到 NetNomos 源码目录：$NetNomos（需位于 netnomos-forge 根目录）" }
 if (-not (Test-Path $DataCsv))  { throw "未找到训练数据：$DataCsv" }
 
 # 1) 同步 NetNomos 依赖（z3-solver / pydantic 等）

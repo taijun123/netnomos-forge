@@ -6,7 +6,11 @@ import { MarkdownBlock } from "../components/MarkdownBlock";
 import { ScenarioRunPanel } from "../components/ScenarioRunPanel";
 import { DataSourceUploadBox, type UploadedDataSource } from "../components/DataSourceUploadBox";
 import { mergeRuleCards } from "../lib/resultAdapters";
-import type { WorkflowStartPayload } from "../lib/apiClient";
+import {
+  collectWorkflowDataSourceUsage,
+  type WorkflowJobStatus,
+  type WorkflowStartPayload,
+} from "../lib/apiClient";
 import type { WorkflowJobResult } from "../lib/events";
 import type { DualReport, Violation } from "../types/api";
 import { useDemo } from "../demo/DemoContext";
@@ -46,6 +50,8 @@ export function NetworkDemoPage() {
   const [liveResult, setLiveResult] = useState<WorkflowJobResult | null>(null);
   const [validationResult, setValidationResult] = useState<WorkflowJobResult | null>(null);
   const [dualResult, setDualResult] = useState<WorkflowJobResult | null>(null);
+  const [validationJob, setValidationJob] = useState<WorkflowJobStatus | null>(null);
+  const [dualJob, setDualJob] = useState<WorkflowJobStatus | null>(null);
   const [validationSource, setValidationSource] = useState<UploadedDataSource | null>(null);
   const [learningSource, setLearningSource] = useState<UploadedDataSource | null>(null);
   const [useBuiltInLearning, setUseBuiltInLearning] = useState(true);
@@ -85,6 +91,8 @@ export function NetworkDemoPage() {
         setValidationSource(ds);
         setValidationResult(null);
         setDualResult(null);
+        setValidationJob(null);
+        setDualJob(null);
         await delay(DEMO_PACING.beforeValidate);
         setValidateToken((x) => x + 1); // 触发新资料核查
         const val = await awaitGate(gates.validate, delay, "network validation workflow");
@@ -137,6 +145,8 @@ export function NetworkDemoPage() {
     setLiveResult(null);
     setValidationResult(null);
     setDualResult(null);
+    setValidationJob(null);
+    setDualJob(null);
     if (previousLearningSourceId) {
       setValidationSource((current) =>
         current?.dataSourceId === previousLearningSourceId ? null : current
@@ -150,6 +160,8 @@ export function NetworkDemoPage() {
     setLiveResult(null);
     setValidationResult(null);
     setDualResult(null);
+    setValidationJob(null);
+    setDualJob(null);
     if (learningSourceId) {
       setValidationSource((current) =>
         current?.dataSourceId === learningSourceId ? null : current
@@ -209,6 +221,8 @@ export function NetworkDemoPage() {
               setValidationSource(source);
               setValidationResult(null);
               setDualResult(null);
+              setValidationJob(null);
+              setDualJob(null);
             }}
             requestPayload={
               validationSource
@@ -220,8 +234,12 @@ export function NetworkDemoPage() {
             }
             violations={violations}
             hasValidationResult={Boolean(validationResult)}
-            onResult={(result) => {
+            dataSourceNotice={formatDataSourceJobNotice(validationJob ?? validationResult, validationSource)}
+            onResult={(result, job) => {
+              setValidationJob(job);
               setValidationResult(result);
+              setDualResult(null);
+              setDualJob(null);
               setLiveResult(result);
               gatesRef.current?.validate.resolve(result);
             }}
@@ -248,14 +266,18 @@ export function NetworkDemoPage() {
                 validationDataSourceId: validationSource.dataSourceId,
               }}
               autoRunToken={dualToken}
-              onResult={(result) => {
+              onResult={(result, job) => {
+                setDualJob(job);
                 setDualResult(result);
                 setLiveResult(result);
                 gatesRef.current?.dual.resolve(result);
               }}
               onError={(err) => gatesRef.current?.dual.reject(err)}
             />
-            <DualTrackFlows dual={dualResult?.dual} />
+            <DualTrackFlows
+              dual={dualResult?.dual}
+              dataSourceNotice={formatDataSourceJobNotice(dualJob ?? dualResult, validationSource)}
+            />
           </div>
           ) : (
             <EmptyLiveState
@@ -266,7 +288,11 @@ export function NetworkDemoPage() {
         )}
         {step === "report" && (
           validationSource ? (
-            <ReportStep dual={dualResult?.dual} sourceLabel={validationSourceLabel} />
+            <ReportStep
+              dual={dualResult?.dual}
+              sourceLabel={validationSourceLabel}
+              dataSourceNotice={formatDataSourceJobNotice(dualJob ?? dualResult, validationSource)}
+            />
           ) : (
             <EmptyLiveState
               title="请先上传待核查网络资料"
@@ -282,6 +308,28 @@ export function NetworkDemoPage() {
 function formatUploadedSource(source: UploadedDataSource | null): string {
   if (!source) return "尚未上传待核查资料";
   return `${source.filename} · dataSourceId ${source.dataSourceId}`;
+}
+
+function formatDataSourceJobNotice(
+  jobOrResult: WorkflowJobStatus | WorkflowJobResult | null | undefined,
+  source: UploadedDataSource | null
+): string {
+  const usage = collectWorkflowDataSourceUsage(jobOrResult ?? null);
+  const requestEntries = [
+    ["dataSourceId", usage.request.dataSourceId],
+    ["trainingDataSourceId", usage.request.trainingDataSourceId],
+    ["validationDataSourceId", usage.request.validationDataSourceId],
+  ].filter((entry): entry is [string, string] => Boolean(entry[1]));
+  if (requestEntries.length > 0) {
+    return `后端 job request 已携带上传资料 ID：${requestEntries.map(([key, value]) => `${key}=${value}`).join("；")}。该 dataSourceId 参与了本次任务入参。`;
+  }
+  if (usage.resultRefs.length > 0) {
+    return `后端 result 返回数据源引用：${usage.resultRefs.map((ref) => `${ref.purpose}=${ref.id}${ref.filename ? ` (${ref.filename})` : ""}`).join("；")}。`;
+  }
+  if (source) {
+    return `文件已上传并登记为 dataSourceId ${source.dataSourceId}；运行 job 后再根据 request/result 确认它是否参与本次任务。`;
+  }
+  return "尚未选择待核查资料。";
 }
 
 function isAbortError(err: unknown): boolean {
@@ -442,6 +490,7 @@ function NetworkValidationStep({
   requestPayload,
   violations,
   hasValidationResult,
+  dataSourceNotice,
   onResult,
   onError,
 }: {
@@ -451,7 +500,8 @@ function NetworkValidationStep({
   requestPayload: WorkflowStartPayload;
   violations: Violation[];
   hasValidationResult: boolean;
-  onResult: (result: WorkflowJobResult) => void;
+  dataSourceNotice: string;
+  onResult: (result: WorkflowJobResult, job: WorkflowJobStatus) => void;
   onError?: (err: unknown) => void;
 }) {
   const [runId, setRunId] = useState<number | null>(null);
@@ -475,12 +525,13 @@ function NetworkValidationStep({
       <DataSourceUploadBox
         scenario="network_cidds"
         title="选择待核查网络资料"
-        description="支持 CSV、JSON、TXT、PCAP/PCAPNG 摘要文件。文件会保存并随核查 job 传入；W4 核查引擎当前复用稳定 CIDDS 演示管线。"
+        description="支持 CSV、JSON、TXT、PCAP/PCAPNG 摘要文件。上传成功会保存文件并登记 dataSourceId；点击运行后再根据 job request/result 确认该 ID 是否参与核查。"
         accept=".csv,.json,.txt,.pcap,.pcapng"
         note="network-validation-material"
         uploaded={uploaded}
         onUploaded={onUploaded}
       />
+      <p className="upload-note">{dataSourceNotice}</p>
       <div className="workflow-actions">
         <button className="btn btn-primary" disabled={!uploaded || running} onClick={startValidation}>
           {running ? "新资料核查运行中…" : "运行新资料核查"}
@@ -678,7 +729,27 @@ function FlowTable({ rows, track }: { rows: NetFlowRow[]; track: "A" | "B" }) {
   );
 }
 
-function DualTrackFlows({ dual }: { dual?: DualReport | null }) {
+function describeTrackBGeneration(log: string[], rowCount: number): string {
+  if (log.length === 0) {
+    return "后端没有返回 track_b.intervention_log，暂不判断本次 B 轨是 LeJIT 生成还是 fallback。";
+  }
+  const text = log.join("\n");
+  if (/(降级|回退|预置|不可用|失败)/.test(text)) {
+    return "后端 intervention_log 显示：本次 B 轨触发 fallback/预置样本兜底；原因和终检结果见右侧日志。";
+  }
+  if (/LeJIT/.test(text)) {
+    return `后端 intervention_log 显示：LeJIT 约束解码生成 ${rowCount || "多"} 条记录，并完成规则终检；具体步骤见右侧日志。`;
+  }
+  return "B 轨状态按后端 intervention_log 展示；具体生成路径和终检结果见右侧日志。";
+}
+
+function DualTrackFlows({
+  dual,
+  dataSourceNotice,
+}: {
+  dual?: DualReport | null;
+  dataSourceNotice: string;
+}) {
   if (!dual) {
     return (
       <EmptyLiveState
@@ -693,6 +764,7 @@ function DualTrackFlows({ dual }: { dual?: DualReport | null }) {
   const bLog = dual.track_b.intervention_log ?? [];
   const trackAViolations = dual.track_a.violations.length;
   const trackBViolations = dual.track_b.violations.length;
+  const trackBGeneration = describeTrackBGeneration(bLog, trackB.length);
 
   return (
     <div className="dual-track">
@@ -715,8 +787,9 @@ function DualTrackFlows({ dual }: { dual?: DualReport | null }) {
           <span className="track-verdict ok">{trackBViolations} 违规</span>
         </div>
         <p className="track-desc">
-          LeJIT bundle 按字段拓扑序生成，每步过 Z3。右侧为逐步干预日志。
+          {trackBGeneration}
         </p>
+        <p className="track-desc">{dataSourceNotice}</p>
         <div className="track-b-body">
           <div className="table-scroll">
             <FlowTable rows={trackB} track="B" />
@@ -724,9 +797,11 @@ function DualTrackFlows({ dual }: { dual?: DualReport | null }) {
           <aside className="intervention-log">
             <h4>干预日志</h4>
             <ul>
-              {bLog.map((line, i) => (
-                <li key={i}>{line}</li>
-              ))}
+              {bLog.length > 0
+                ? bLog.map((line, i) => (
+                    <li key={i}>{line}</li>
+                  ))
+                : <li>后端未返回 track_b.intervention_log。</li>}
             </ul>
           </aside>
         </div>
@@ -738,9 +813,11 @@ function DualTrackFlows({ dual }: { dual?: DualReport | null }) {
 function ReportStep({
   dual,
   sourceLabel,
+  dataSourceNotice,
 }: {
   dual?: DualReport | null;
   sourceLabel: string;
+  dataSourceNotice: string;
 }) {
   if (dual) {
     const href = buildReportDownloadHref(dual, sourceLabel);
@@ -752,6 +829,7 @@ function ReportStep({
           <p className="upload-note">
             资料：{sourceLabel}。问题框请填写要生成几条 NetFlow、要核查哪些规则，以及是否需要给出约束后的合规版本。
           </p>
+          <p className="upload-note">{dataSourceNotice}</p>
           <a className="btn btn-outline" href={href} download="network-dual-report.md">
             下载报告 Markdown
           </a>

@@ -7,7 +7,7 @@
   + R06/R07 软规则）→ 规则卡（engine.explain + explainer RAG 增强）→
   validate → Projector 修正 → 双轨报告 + diff。
 - run_network_pipeline(job, emit)：网络双轨。learn 在沙箱降级为加载
-  golden_cidds 规则文件（NetNomos 仓库 rules/golden_cidds/rules.json，
+  golden_cidds 规则文件（仓库内 NetNomos/rules/golden_cidds/rules.json，
   纯 JSON 解析）；宿主机可传 use_netnomos=True 走真实 NetNomosMiner 学习。
 
 emit 为 ``emit(WorkflowEvent) -> None`` 回调；事件 stage 顺序：
@@ -26,16 +26,19 @@ from pathlib import Path
 from typing import Any, Callable
 
 from forge.contracts import Rule, RuleCard, RuleSet, SCENARIO_DIR, ViolationReport, WorkflowEvent
+from forge.contracts import FIN_FIELDS
 
 log = logging.getLogger("server.pipeline")
 
 FORGE_ROOT = Path(__file__).resolve().parents[1]          # netnomos-forge/
 FORGE_CIDDS_RULES = FORGE_ROOT / "forge" / "rulesets" / "network_cidds" / "golden" / "rules.json"
-NETNOMOS_CIDDS_RULES = FORGE_ROOT.parent / "NetNomos" / "rules" / "golden_cidds" / "rules.json"
+NETNOMOS_ROOT = FORGE_ROOT / "NetNomos"
+NETNOMOS_CIDDS_RULES = NETNOMOS_ROOT / "rules" / "golden_cidds" / "rules.json"
 GOLDEN_CIDDS_RULES = FORGE_CIDDS_RULES if FORGE_CIDDS_RULES.exists() else NETNOMOS_CIDDS_RULES
-CIDDS_TRAIN_CSV = FORGE_ROOT.parent / "NetNomos" / "data" / "cidds_wk2_normal_10k.csv"
+CIDDS_TRAIN_CSV = NETNOMOS_ROOT / "data" / "cidds_wk2_normal_10k.csv"
 FIN_MANUAL_RULES = SCENARIO_DIR / "finance_v1" / "manual_rules.json"
 NETWORK_UPLOADS_DIR = FORGE_ROOT / "demo_artifacts" / "uploads" / "network_cidds"
+FINANCE_UPLOADS_DIR = FORGE_ROOT / "demo_artifacts" / "uploads" / "finance_v1"
 NETWORK_REQUIRED_FIELDS = {"Proto", "Packets", "Bytes"}
 
 Emit = Callable[[WorkflowEvent], None]
@@ -44,6 +47,7 @@ Emit = Callable[[WorkflowEvent], None]
 NET_MAX_CARDS = 12
 ENABLE_RULECARD_LLM = os.getenv("FORGE_RULECARD_LLM", "").lower() in {"1", "true", "yes", "on"}
 NETWORK_UPLOAD_SUFFIXES = {".csv", ".json", ".txt"}
+FINANCE_UPLOAD_SUFFIXES = {".csv", ".json", ".txt"}
 
 
 def _env_int(name: str, default: int, *, minimum: int = 0) -> int:
@@ -192,6 +196,84 @@ def _load_network_data_source(
     }
 
 
+def _read_finance_upload_frame(path: Path):
+    import pandas as pd  # noqa: PLC0415
+
+    text = path.read_text(encoding="utf-8-sig")
+    suffix = path.suffix.lower()
+    if suffix == ".json" or (suffix == ".txt" and text.lstrip().startswith(("{", "["))):
+        payload = json.loads(text)
+        if isinstance(payload, dict):
+            payload = payload.get("rows")
+        if not isinstance(payload, list) or not all(isinstance(row, dict) for row in payload):
+            raise RuntimeError(f"finance upload JSON must be a row list or object with rows: {path.name}")
+        df = pd.DataFrame(payload)
+    else:
+        df = pd.read_csv(path, encoding="utf-8-sig")
+    if df.empty:
+        raise RuntimeError(f"finance upload is empty or cannot be parsed: {path.name}")
+    missing = [field for field in FIN_FIELDS if field not in df.columns]
+    if missing:
+        raise RuntimeError(
+            f"finance upload missing required fields {', '.join(missing)}: {path.name}"
+        )
+    df = df[FIN_FIELDS].copy()
+    numeric_fields = [field for field in FIN_FIELDS if field not in {"CompanyId", "Industry"}]
+    for field in numeric_fields:
+        df[field] = pd.to_numeric(df[field], errors="raise")
+    return df
+
+
+def _load_finance_data_source(
+    data_source_id: str | None,
+    *,
+    purpose: str,
+) -> dict[str, Any] | None:
+    if not data_source_id:
+        return None
+    from server.store import get_store  # noqa: PLC0415
+
+    store = get_store()
+    meta = store.data_sources.get(data_source_id)
+    if meta is None:
+        raise RuntimeError(
+            f"上传数据源 {data_source_id} 不存在，可能服务已重启，请重新上传。"
+        )
+    scenario = str(meta.get("scenario") or "")
+    if scenario != "finance_v1":
+        raise RuntimeError(
+            f"上传数据源 {data_source_id} 属于 {scenario}，不能用于 finance_v1。"
+        )
+    raw_path = meta.get("path")
+    if not raw_path:
+        raise RuntimeError(f"上传数据源 {data_source_id} 没有可读取文件路径。")
+    path = Path(str(raw_path)).resolve()
+    uploads_root = FINANCE_UPLOADS_DIR.resolve()
+    try:
+        path.relative_to(uploads_root)
+    except ValueError as exc:
+        raise RuntimeError(
+            f"上传数据源 {data_source_id} 路径越界，拒绝读取：{path}"
+        ) from exc
+    if path.suffix.lower() not in FINANCE_UPLOAD_SUFFIXES:
+        raise RuntimeError(
+            f"财务{purpose}仅支持 CSV、JSON、TXT 文件：{path.name}"
+        )
+    if not path.is_file():
+        raise RuntimeError(
+            f"上传数据源 {data_source_id} 文件不存在，请重新上传：{path.name}"
+        )
+    frame = _read_finance_upload_frame(path)
+    return {
+        "id": data_source_id,
+        "meta": meta,
+        "path": path,
+        "frame": frame,
+        "filename": str(meta.get("filename") or path.name),
+        "purpose": purpose,
+    }
+
+
 # ---------------------------------------------------------------------------
 # 财务管线（沙箱端到端可跑）
 # ---------------------------------------------------------------------------
@@ -212,20 +294,40 @@ def run_finance_pipeline(job: Any, emit: Emit, llm=None,
         FinanceValidator, RULE_TEXTS)
 
     _ev(emit, "control", "running", "财务双轨报告任务开始编排。")
+    params = _request_params(job)
+    finance_source = _load_finance_data_source(
+        str(params.get("validationDataSourceId") or params.get("dataSourceId") or "")
+        or None,
+        purpose="核查/报告",
+    )
 
     # -- upload：构造华信咨询待审资料包（确定性注入 F1–F4） --------------------
-    _ev(emit, "upload", "running", "接收「华信咨询」待审资料包…")
-    df_clean = build_clean_package()
-    df_faulty, truth = inject_faults(df_clean)
-    _ev(emit, "upload", "done",
-        f"资料包就绪：{len(df_faulty)} 期报表，附错误清单真值表"
-        f"（{len(truth['faults'])} 项注入错误）。")
+    if finance_source is not None:
+        _ev(emit, "upload", "running",
+            f"读取上传财务资料 {finance_source['filename']}…")
+        df_faulty = finance_source["frame"]
+        truth = None
+        data_path = str(finance_source["path"])
+        data_label = finance_source["filename"]
+        _ev(emit, "upload", "done",
+            f"上传资料已读取：{data_label}，{len(df_faulty)} 期报表，"
+            f"dataSourceId={finance_source['id']}。")
+    else:
+        _ev(emit, "upload", "running", "未提供 dataSourceId，使用内置「华信咨询」待审资料包…")
+        df_clean = build_clean_package()
+        df_faulty, truth = inject_faults(df_clean)
+        data_path = "华信咨询_待审资料包.csv"
+        data_label = data_path
+        _ev(emit, "upload", "done",
+            f"内置资料包就绪：{len(df_faulty)} 期报表，附错误清单真值表"
+            f"（{len(truth['faults'])} 项注入错误）。")
 
     # -- prepare ---------------------------------------------------------------
     _ev(emit, "prepare", "running", "解析字段 / 中文列名映射 / 按期排序…")
     df_faulty = df_faulty.sort_values("PeriodIndex").reset_index(drop=True)
     _ev(emit, "prepare", "done",
-        f"预处理完成：{len(df_faulty.columns)} 个字段（含派生折叠字段）。")
+        f"预处理完成：{len(df_faulty.columns)} 个字段（含派生折叠字段），"
+        f"数据源 {data_label}。")
 
     # -- learn：规则集（人工通道兜底；宿主机可叠加真实学习） ---------------------
     _ev(emit, "learn", "running",
@@ -267,9 +369,9 @@ def run_finance_pipeline(job: Any, emit: Emit, llm=None,
         f"规则卡 {len(cards)} 张生成完毕（疑似巧合 {coincidences} 张）。")
 
     # -- validate ----------------------------------------------------------------
-    _ev(emit, "validate", "running", "对资料包逐项核查勾稽关系…")
+    _ev(emit, "validate", "running", f"对 {data_label} 逐项核查勾稽关系…")
     validator = FinanceValidator()
-    vreport = validator.validate(df_faulty, "华信咨询_待审资料包.csv")
+    vreport = validator.validate(df_faulty, data_path)
     hit_rules = "、".join(sorted(vreport.by_rule))
     _ev(emit, "validate", "done",
         f"核查完成：{len(vreport.violations)} 处违规，命中规则 {hit_rules}，"
@@ -289,7 +391,8 @@ def run_finance_pipeline(job: Any, emit: Emit, llm=None,
         "stage=report processor=A轨裸模型+B轨约束：A 轨裸模型照抄错误资料撰写报告…")
     _ev(emit, "report", "running",
         "stage=report processor=A轨裸模型+B轨约束：B 轨修正口径槽位回填 + 终检扫描…")
-    dual = reporter.make_dual(df_faulty, truth=truth, ruleset=ruleset)
+    dual = reporter.make_dual(df_faulty, truth=truth, ruleset=ruleset,
+                              data_path=data_path)
     _ev(emit, "report", "done",
         f"双轨报告就绪：A 轨标红 {len(dual.track_a.violations)} 处，"
         f"B 轨终检告警 {len(reporter.last_b_warnings)} 条。")
@@ -305,6 +408,12 @@ def run_finance_pipeline(job: Any, emit: Emit, llm=None,
         "truth": truth,
         "interventions": interventions,
         "df_corrected": df_corr,
+        "data_source": {
+            "validation": {
+                "id": finance_source["id"],
+                "filename": finance_source["filename"],
+            } if finance_source else None,
+        },
     }
 
 
@@ -452,10 +561,15 @@ def run_network_pipeline(job: Any, emit: Emit, llm=None,
         track_a_source_label = f"上传资料 {validation_source['filename']}"
 
     # -- report / diff --------------------------------------------------------------
+    if track_a_rows is not None:
+        a_track_note = f"A 轨使用上传资料 {len(track_a_rows)} 条 NetFlow"
+    else:
+        a_track_note = "A 轨裸模型生成 10 条 NetFlow"
     _ev(emit, "report", "running",
-        "stage=report processor=A轨裸模型+B轨约束：A 轨裸模型生成 10 条 NetFlow…")
+        f"stage=report processor=A轨裸模型+B轨约束：{a_track_note}…")
     _ev(emit, "report", "running",
-        "stage=report processor=A轨裸模型+B轨约束：B 轨 LeJIT 约束生成（沙箱降级读预置合规样本）…")
+        "stage=report processor=A轨裸模型+B轨约束：B 轨使用 LeJIT 约束生成，"
+        "并做终检过滤/补采；若不达标则 job 失败暴露。")
     reporter = DualReporter(llm=llm)
     dual = reporter.make_dual_network(
         10,

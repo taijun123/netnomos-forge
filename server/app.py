@@ -107,6 +107,8 @@ def _start_job(
                 "agents": result.get("agents"),
                 "ruleGroups": result.get("ruleGroups"),
                 "dataSources": result.get("dataSources"),
+                "data_source": result.get("data_source"),
+                "dataSource": result.get("data_source"),
                 "artifacts": result.get("artifacts"),
                 "workflowEvents": result.get("workflowEvents"),
                 "request": request_snapshot,

@@ -2,7 +2,7 @@
 # 用法：powershell -ExecutionPolicy Bypass -File scripts\host\train_network_lejit.ps1
 #       powershell -File ...\train_network_lejit.ps1 -Gpu 0          # 用 0 号 GPU
 #       powershell -File ...\train_network_lejit.ps1 -RulesJson <自定义 rules.json>
-# 目录约定：<workspace>\netnomos-forge 与 <workspace>\LeJIT、<workspace>\NetNomos 同级
+# 目录约定：LeJIT、NetNomos 随本仓库放在 netnomos-forge 根目录下
 param(
     [string]$RulesJson = "",      # 缺省用 forge\rulesets\network_cidds\golden\rules.json
     [string]$Gpu = "",            # 如 "0"；留空 = 不设 CUDA_VISIBLE_DEVICES（CPU 或默认 GPU）
@@ -11,15 +11,14 @@ param(
 $ErrorActionPreference = "Stop"
 
 $ForgeRoot = (Resolve-Path "$PSScriptRoot\..\..").Path
-$Workspace = (Resolve-Path "$ForgeRoot\..").Path
-$LeJIT     = Join-Path $Workspace "LeJIT"
-$NetNomos  = Join-Path $Workspace "NetNomos"
+$LeJIT     = Join-Path $ForgeRoot "LeJIT"
+$NetNomos  = Join-Path $ForgeRoot "NetNomos"
 $ScenDir   = Join-Path $ForgeRoot "forge\scenarios\network_cidds"
 $BundleDir = Join-Path $ForgeRoot "forge\rulesets\network_cidds\lejit_bundle"
 $ConfigOut = Join-Path $ForgeRoot "forge\rulesets\network_cidds\lejit_train.toml"
 
 if ($RulesJson -eq "") { $RulesJson = Join-Path $ForgeRoot "forge\rulesets\network_cidds\golden\rules.json" }
-if (-not (Test-Path $LeJIT))     { throw "未找到 LeJIT 仓库：$LeJIT" }
+if (-not (Test-Path $LeJIT))     { throw "未找到 LeJIT 源码目录：$LeJIT" }
 if (-not (Test-Path $RulesJson)) { throw "未找到规则文件：$RulesJson（请先运行 run_network_learn.ps1）" }
 
 # CUDA 设备选择示例：-Gpu 0 → 只暴露 0 号卡给 torch

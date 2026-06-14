@@ -11,8 +11,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $ForgeRoot = (Resolve-Path "$PSScriptRoot\..\..").Path
-$Workspace = (Resolve-Path "$ForgeRoot\..").Path
-$LeJIT     = Join-Path $Workspace "LeJIT"
+$LeJIT     = Join-Path $ForgeRoot "LeJIT"
 $BundleDir = Join-Path $ForgeRoot "forge\rulesets\network_cidds\lejit_bundle"
 $ConfigToml = Join-Path $ForgeRoot "forge\rulesets\network_cidds\lejit_train.toml"
 if ($Output -eq "") { $Output = Join-Path $ForgeRoot "forge\rulesets\network_cidds\generated.csv" }

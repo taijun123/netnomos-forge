@@ -8,7 +8,8 @@
 - MockBackend：确定性模板回复，沙箱/单测专用，零外部依赖。
 
 RoutedLLM 按角色（induce/draft/explain）路由；默认运行时策略为 Ollama
-优先（不修改 contracts.py 的冻结契约），Ollama 不通时自动降级 codex/mock。
+优先（不修改 contracts.py 的冻结契约），Ollama 不通时自动降级 mock。Codex CLI
+后端需显式设置 FORGE_ENABLE_CODEX_BACKEND=1 才参与降级链。
 """
 from __future__ import annotations
 
@@ -24,6 +25,10 @@ log = logging.getLogger("forge.core.llm")
 
 # 后端不可用时的降级顺序（mock 永远可用，作为兜底）
 _FALLBACK_ORDER = ["ollama", "codex", "mock"]
+
+
+def _env_truthy(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _ollama_first_routing() -> dict[str, dict[str, Any]]:
@@ -130,7 +135,10 @@ class CodexBackend:
 
     def available(self) -> bool:
         if self._available is None:
-            self._available = shutil.which(self.binary) is not None
+            self._available = (
+                _env_truthy("FORGE_ENABLE_CODEX_BACKEND")
+                and shutil.which(self.binary) is not None
+            )
         return self._available
 
     def complete(self, prompt: str, role: str, system: str | None = None,
@@ -139,13 +147,17 @@ class CodexBackend:
         try:
             proc = subprocess.run(
                 [self.binary, "exec", full_prompt],
-                capture_output=True, text=True, timeout=self.timeout,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=self.timeout,
             )
         except subprocess.TimeoutExpired as exc:
             raise RuntimeError(f"codex exec 超时（>{self.timeout}s），请检查 codex CLI 状态") from exc
         if proc.returncode != 0:
             raise RuntimeError(f"codex exec 退出码 {proc.returncode}：{proc.stderr[:500]}")
-        return proc.stdout.strip()
+        return (proc.stdout or "").strip()
 
 
 class RoutedLLM:

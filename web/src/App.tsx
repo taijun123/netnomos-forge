@@ -33,15 +33,13 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (route === "log-demo") setShowLogPanel(true);
+    setShowLogPanel(route === "log-demo");
+    window.scrollTo({ top: 0, left: 0 });
   }, [route]);
 
   const navigate = (next: Route) => {
     window.location.hash = `#/${next}`;
     setRoute(next);
-    // 切页回到顶部
-    const main = document.querySelector(".app-main");
-    main?.scrollTo({ top: 0 });
   };
 
   return (

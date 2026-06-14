@@ -9,7 +9,7 @@
 | `netflow_rule_anomaly_upload.csv` | 演示上传文件，CIDDS 风格 NetFlow 摘要，故意包含 UDP Flags、Packets/Bytes 和 DNS 身份异常。 |
 | `cidds_wk2_normal_10k_correct_training.csv` | 10,000 行 CIDDS 正常训练流量，用于讲解 NetNomos 规则自发现来源。 |
 | `network_generated_10_reference.csv` | 网络生成样本参考，不作为上传文件。 |
-| `network_b_track_reference_sample.json` | 从 `forge/rulesets/network_cidds/sample_b.json` 复制的 B 轨合规参考样本，不作为上传文件。 |
+| `network_b_track_reference_sample.json` | 从 `forge/rulesets/network_cidds/sample_b.json` 复制的 B 轨合规参考/回归样本，不作为上传文件，也不参与当前运行时 B 轨成功路径。 |
 | `prompts.md` | 可直接复制的中文问题、A/B 双轨讲解词和报告生成口径。 |
 | `references/` | 从网络场景、知识库和 golden 规则集复制的相关说明、规则控制参考。 |
 

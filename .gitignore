@@ -6,6 +6,11 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 
+# Local environment
+.env
+.env.*
+!.env.example
+
 # Node / frontend
 node_modules/
 web/node_modules/
@@ -45,8 +50,34 @@ docs/*_render_test.*
 **/training_args.bin
 forge/rulesets/*/20*/
 forge/rulesets/*/generated*.csv
-# Required network_cidds B-track fallback sample is tracked.
+# Small rule/reference samples under forge/rulesets are intentionally tracked.
 
 # Raw local data drops
 data/*.csv
 data/*.pcap
+
+# Project documentation policy
+# Keep only the curated root docs and demo operator docs listed in README.
+# Already tracked files require `git rm --cached` if they should leave the index.
+docs/
+web/README.md
+agents/
+skills/
+.claude/
+AI_WORKSITE_HANDOFF.md
+CLAUDE_HANDOFF.md
+FORGE_STATUS_MAP.*
+FORGE_GIT_PIPELINE.*
+demo_artifacts/w4_demo_assets/**/references/*.md
+forge/scenarios/**/README.md
+tools/render_forge_*.py
+
+# Local dependency working trees are vendored under the repo, but their local
+# virtualenvs, build outputs, and nested VCS metadata must never be committed.
+NetNomos/.git/
+NetNomos/.venv/
+NetNomos/.pytest_cache/
+NetNomos/netnomos.egg-info/
+LeJIT/.git/
+LeJIT/.venv/
+LeJIT/.pytest_cache/

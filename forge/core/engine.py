@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """forge.core.engine — ForgeRuleEngine（实现 contracts.RuleEngineAPI）.
 
-对 NetNomos（github 同级目录 ../NetNomos）做薄封装：
+对仓库内 NetNomos 源码目录做薄封装：
 - 所有 netnomos import 全部懒加载（方法内部），沙箱缺 pydantic/z3 时只在真正调用
   挖掘/验证功能的方法处抛出带中文指引的 RuntimeError；
 - 纯 Python 的部分（场景加载、RuleSet 落盘/加载、人工规则合并、explain 降级模板）
@@ -48,7 +48,7 @@ MAX_VIOLATIONS_PER_RULE = 50
 _NETNOMOS_HINT = (
     "无法导入 netnomos（或其依赖 pydantic/z3-solver）。当前环境（如沙箱）无外网 pip，"
     "请在宿主机操作：\n"
-    "  1. cd <workspace>/NetNomos && uv sync\n"
+    "  1. cd <workspace>/netnomos-forge/NetNomos && uv sync\n"
     "  2. 以 `uv run python ...` 或激活 .venv 后运行 forge 代码；\n"
     "  3. 一键学习可直接执行 scripts/host/run_network_learn.ps1。"
 )

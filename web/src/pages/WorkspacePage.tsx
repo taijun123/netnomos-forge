@@ -10,7 +10,6 @@ import {
   FileText,
   Info,
   Loader2,
-  Paperclip,
   Pencil,
   Plus,
   Receipt,
@@ -23,19 +22,18 @@ import {
   X,
 } from "lucide-react";
 import {
+  collectWorkflowDataSourceUsage,
   fetchWorkflowJob,
   sendConstrainedChatMessage,
-  startOfficeWorkflow,
   startWorkflowJob,
-  uploadOfficeDataSource,
   uploadDataSource,
-  waitForWorkflowJob,
   type ConstrainedChatResult,
   type DataSourceUploadResult,
   type WorkflowJobStatus,
 } from "../lib/apiClient";
 import { useDemo } from "../demo/DemoContext";
 import { demoQuestion, makeDemoFile } from "../demo/demoAssets";
+import { MarkdownBlock } from "../components/MarkdownBlock";
 import type { MockSequenceId } from "../mock/sse";
 import type { Scenario, Violation, WorkflowEvent } from "../types/api";
 
@@ -73,6 +71,10 @@ interface DemoAgent {
   role: string;
   status: AgentStatus;
   output?: string;
+}
+
+interface WorkspaceDataSource extends DataSourceUploadResult {
+  scenario: Scenario;
 }
 
 interface WorkspaceDemoConfig {
@@ -156,19 +158,6 @@ const LEARNED_RULES = [
   },
 ];
 
-const INITIAL_MESSAGES: Message[] = [
-  {
-    id: "seed-user",
-    role: "user",
-    content: "帮我核查这份Q1财务报表，用FinGuard规则包",
-  },
-  {
-    id: "seed-assistant",
-    role: "assistant",
-    content: "已对照 30 条规则完成核查：\nR07 资产负债表不平衡，差额 80万\nR14 毛利率计算偏差 2.6%\n27项 全部通过",
-  },
-];
-
 const RULE_RESULTS = [
   { id: "R07", text: "资产负债表不平衡，差额 80万", pass: false },
   { id: "R14", text: "毛利率计算偏差 2.6%", pass: false },
@@ -204,15 +193,63 @@ const WORKSPACE_DEMOS: Record<WorkspaceDemoScenario, WorkspaceDemoConfig> = {
 };
 
 const DEMO_AGENT_TEMPLATE: Omit<DemoAgent, "status" | "output">[] = [
-  { id: "agent-upload", name: "数据接入 Agent", role: "真实上传 demo CSV 并登记 dataSourceId" },
+  { id: "agent-upload", name: "数据接入 Agent", role: "上传或选择资料，并登记 dataSourceId" },
   { id: "agent-learn", name: "规则学习 Agent", role: "后端 NetNomos / Z3 学习或加载规则" },
-  { id: "agent-validate", name: "规则核查 Agent", role: "后端按规则集验证上传资料" },
+  { id: "agent-validate", name: "规则核查 Agent", role: "后端按 job request 中的数据源或默认资料执行核查" },
   { id: "agent-report", name: "报告生成 Agent", role: "后端生成 A/B 双轨与修正依据" },
   { id: "agent-answer", name: "回答生成 Agent", role: "前端展示真实 job result，不编造结果" },
 ];
 
 function makeId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function freshDemoAgents(): DemoAgent[] {
+  return DEMO_AGENT_TEMPLATE.map((agent) => ({ ...agent, status: "pending" as AgentStatus }));
+}
+
+function dataSourceWithScenario(dataSource: DataSourceUploadResult, scenario: Scenario): WorkspaceDataSource {
+  return { ...dataSource, scenario };
+}
+
+function reportSequenceForDemo(scenario: WorkspaceDemoScenario): MockSequenceId {
+  return scenario === "network" ? "report-network" : "report-finance";
+}
+
+function workflowSequenceForDemo(scenario: WorkspaceDemoScenario): MockSequenceId {
+  return scenario === "network" ? "validate-network" : "validate-finance";
+}
+
+function scenarioFromDataSource(scenario: Scenario): WorkspaceDemoScenario | null {
+  if (scenario === "network_cidds" || scenario === "network_pcap") return "network";
+  if (scenario === "finance_v1") return "finance";
+  return null;
+}
+
+function scenarioFromPack(pack: RulePack): WorkspaceDemoScenario | null {
+  const label = `${pack.id} ${pack.name}`.toLowerCase();
+  if (label.includes("netflow") || label.includes("network") || label.includes("网络")) return "network";
+  if (label.includes("finance") || label.includes("finguard") || label.includes("财务") || label.includes("华信")) return "finance";
+  return null;
+}
+
+function pickWorkflowDataSource(
+  scenario: Scenario,
+  backgroundFiles: WorkspaceDataSource[],
+): WorkspaceDataSource | undefined {
+  const exact = backgroundFiles.find((file) => file.scenario === scenario);
+  if (exact) return exact;
+  return scenario === "finance_v1" ? backgroundFiles[0] : undefined;
+}
+
+function resolveWorkspaceDemoScenario(
+  selectedPack: RulePack,
+  currentScenario: WorkspaceDemoScenario,
+  backgroundFiles: WorkspaceDataSource[],
+): WorkspaceDemoScenario {
+  const latestUpload = backgroundFiles[0];
+  const uploadScenario = latestUpload ? scenarioFromDataSource(latestUpload.scenario) : null;
+  return uploadScenario ?? scenarioFromPack(selectedPack) ?? currentScenario;
 }
 
 function resultViolations(job: WorkflowJobStatus): Violation[] {
@@ -228,27 +265,76 @@ function uniqueRuleIds(violations: Violation[]): string[] {
   return Array.from(new Set(violations.map((violation) => violation.rule_id).filter(Boolean)));
 }
 
-function buildResultFromJob(job: WorkflowJobStatus, config: WorkspaceDemoConfig, dataSource: DataSourceUploadResult): ConstrainedChatResult {
+function uniqueStrings(values: string[]): string[] {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
+function formatWorkflowDataSourceNote(job: WorkflowJobStatus, dataSource?: DataSourceUploadResult): string {
+  const usage = collectWorkflowDataSourceUsage(job);
+  const requestEntries = [
+    ["dataSourceId", usage.request.dataSourceId],
+    ["trainingDataSourceId", usage.request.trainingDataSourceId],
+    ["validationDataSourceId", usage.request.validationDataSourceId],
+  ].filter((entry): entry is [string, string] => Boolean(entry[1]));
+  if (requestEntries.length > 0) {
+    return `job request 已携带上传资料 ID：${requestEntries.map(([key, value]) => `${key}=${value}`).join("；")}，该 dataSourceId 参与了本次任务入参。`;
+  }
+  if (usage.resultRefs.length > 0) {
+    return `job result 返回数据源引用：${usage.resultRefs.map((ref) => `${ref.purpose}=${ref.id}${ref.filename ? ` (${ref.filename})` : ""}`).join("；")}。`;
+  }
+  if (dataSource) {
+    return `资料已上传并登记为 dataSourceId ${dataSource.dataSourceId}，但本次 job 结果未返回可见的数据源 request 引用。`;
+  }
+  return "本次 job request 未携带 dataSourceId；后端按该 workflow 的默认资料路径执行。";
+}
+
+function formatNetworkTrackBNote(log: string[] | undefined): string {
+  if (!log?.length) {
+    return "网络 B 轨未返回 track_b.intervention_log，暂不判断 LeJIT 或 fallback 路径。";
+  }
+  const text = log.join("\n");
+  if (/(降级|回退|预置|不可用|失败)/.test(text)) {
+    return "网络 B 轨日志显示触发 fallback/预置样本兜底，具体原因见干预日志。";
+  }
+  if (/LeJIT/.test(text)) {
+    return "网络 B 轨日志显示 LeJIT 约束解码生成并完成终检。";
+  }
+  return "网络 B 轨状态来自后端干预日志。";
+}
+
+function buildResultFromJob(job: WorkflowJobStatus, config: WorkspaceDemoConfig, dataSource?: DataSourceUploadResult): ConstrainedChatResult {
   const violations = resultViolations(job);
   const ruleIds = uniqueRuleIds(violations);
   const dual = job.result?.dual;
+  const trackB = dual?.track_b;
+  const dataSourceUsage = collectWorkflowDataSourceUsage(job);
+  const dataSourceNote = formatWorkflowDataSourceNote(job, dataSource);
+  const trackBNote = config.scenario === "network_cidds" && dual
+    ? formatNetworkTrackBNote(trackB?.intervention_log)
+    : "";
   const checks = violations.length
     ? violations.slice(0, 5).map((violation) => `${violation.rule_id} 失败：${violation.message_zh}`)
-    : ["后端真实核查完成：本次 job 未返回违规项。"];
-  const citations = [
+    : trackB?.intervention_log?.length
+      ? trackB.intervention_log.slice(0, 5)
+      : ["后端真实核查完成：本次 job 未返回违规项。"];
+  const citations = uniqueStrings([
     `job:${job.jobId}`,
-    `dataSource:${dataSource.dataSourceId}`,
+    ...(dataSource ? [`dataSource:${dataSource.dataSourceId}`] : []),
+    ...dataSourceUsage.requestIds.map((id) => `requestDataSource:${id}`),
+    ...dataSourceUsage.resultRefs.map((ref) => `resultDataSource:${ref.purpose}:${ref.id}`),
     ...(job.result?.ruleset_id ? [`ruleset:${job.result.ruleset_id}`] : []),
     ...(dual?.title ? [dual.title] : []),
-  ];
-  const summary = violations.length
-    ? `后端真实核查完成：${config.title} 命中 ${violations.length} 条违规，涉及 ${ruleIds.join("、") || "规则项"}。`
-    : `后端真实核查完成：${config.title} 未返回违规项。`;
-  const reportHint = dual?.track_b?.intervention_log?.length
-    ? ` B 轨修正日志：${dual.track_b.intervention_log.slice(0, 2).join("；")}`
+  ]);
+  const summary = trackB?.markdown
+    ? `后端真实 B 轨结果已生成：${dual?.title || config.title}。B 轨终检 ${trackB.violations?.length ?? 0} 处违规。`
+    : violations.length
+      ? `后端真实核查完成：${config.title} 命中 ${violations.length} 条违规，涉及 ${ruleIds.join("、") || "规则项"}。`
+      : `后端真实核查完成：${config.title} 未返回违规项。`;
+  const reportHint = trackB?.intervention_log?.length
+    ? ` B 轨修正日志：${trackB.intervention_log.slice(0, 2).join("；")}`
     : "";
   return {
-    content: `${summary}${reportHint}`,
+    content: [summary, dataSourceNote, trackBNote, reportHint].filter(Boolean).join(" "),
     constrained: true,
     matchedRules: ruleIds,
     checks,
@@ -259,6 +345,12 @@ function buildResultFromJob(job: WorkflowJobStatus, config: WorkspaceDemoConfig,
         .filter(Boolean)
     ).slice(0, 8),
     backend: "real-workflow",
+    jobId: job.jobId,
+    dataSourceId: dataSource?.dataSourceId ?? dataSourceUsage.requestIds[0],
+    dualTitle: dual?.title,
+    trackAMarkdown: dual?.track_a?.markdown,
+    trackBMarkdown: trackB?.markdown,
+    interventionLog: trackB?.intervention_log,
   };
 }
 
@@ -304,6 +396,17 @@ function finalizeAgents(events: WorkflowEvent[], current: DemoAgent[], result: C
   });
 }
 
+function finalizeLearningAgents(events: WorkflowEvent[], current: DemoAgent[], output: string): DemoAgent[] {
+  const next = agentsFromJobEvents(events, current);
+  return next.map((agent) => {
+    if (agent.id === "agent-answer") {
+      return { ...agent, status: "done", output };
+    }
+    if (agent.status === "done") return agent;
+    return { ...agent, status: "done", output: agent.output ?? "规则学习阶段已完成。" };
+  });
+}
+
 
 export function WorkspacePage() {
   const { mode, officeScenario, runToken, setStatus } = useDemo();
@@ -311,11 +414,10 @@ export function WorkspacePage() {
   const [selectedTaskId, setSelectedTaskId] = useState(DEFAULT_TASKS[0].id);
   const [rulePacks, setRulePacks] = useState(DEFAULT_PACKS);
   const [selectedPackId, setSelectedPackId] = useState(DEFAULT_PACKS[0].id);
-  const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [ragFiles, setRagFiles] = useState<DataSourceUploadResult[]>([]);
-  const [backgroundFiles, setBackgroundFiles] = useState<DataSourceUploadResult[]>([]);
-  const [isUploading, setIsUploading] = useState<"rag" | "background" | null>(null);
+  const [backgroundFiles, setBackgroundFiles] = useState<WorkspaceDataSource[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
   const [isLearning, setIsLearning] = useState(false);
   const [isChatting, setIsChatting] = useState(false);
   const [learnJob, setLearnJob] = useState<WorkflowJobStatus | null>(null);
@@ -325,7 +427,6 @@ export function WorkspacePage() {
   const [demoScenario, setDemoScenario] = useState<WorkspaceDemoScenario>("finance");
   const [isAutoDemo, setIsAutoDemo] = useState(false);
   const [demoAgents, setDemoAgents] = useState<DemoAgent[]>([]);
-  const ragInputRef = useRef<HTMLInputElement>(null);
   const backgroundInputRef = useRef<HTMLInputElement>(null);
   const lastDemoTokenRef = useRef(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -333,8 +434,12 @@ export function WorkspacePage() {
   const selectedPack = rulePacks.find((pack) => pack.id === selectedPackId) ?? rulePacks[0];
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? tasks[0];
   const uploadedNames = useMemo(
-    () => [...ragFiles, ...backgroundFiles].map((file) => file.filename),
-    [backgroundFiles, ragFiles]
+    () => backgroundFiles.map((file) => file.filename),
+    [backgroundFiles]
+  );
+  const activeWorkflowScenario = useMemo(
+    () => resolveWorkspaceDemoScenario(selectedPack, demoScenario, backgroundFiles),
+    [backgroundFiles, demoScenario, selectedPack]
   );
 
   useEffect(() => {
@@ -350,7 +455,7 @@ export function WorkspacePage() {
   async function runWorkspaceDemo(scenario: WorkspaceDemoScenario = demoScenario) {
     if (isAutoDemo) return;
     const config = WORKSPACE_DEMOS[scenario];
-    const agents = DEMO_AGENT_TEMPLATE.map((agent) => ({ ...agent, status: "pending" as AgentStatus }));
+    const agents = freshDemoAgents();
     const question = demoQuestion(scenario);
     setStatus("running");
     setWorkspaceError(null);
@@ -371,29 +476,28 @@ export function WorkspacePage() {
     };
     setTasks((cur) => [task, ...cur.filter((item) => item.id !== task.id)]);
     setSelectedTaskId(task.id);
-    setRagFiles([]);
     setBackgroundFiles([]);
     setLearnJob(null);
     setMessages([
       {
         id: makeId("system"),
         role: "system",
-        content: `一键演示 · ${config.title}：正在上传真实 demo 数据，并提交后端 ${config.sequence} workflow。`,
+        content: `一键演示 · ${config.title}：正在上传 demo 数据并登记 dataSourceId，随后提交后端 ${config.sequence} workflow。`,
       },
     ]);
 
     try {
-      setDemoAgents((cur) => cur.map((agent) => agent.id === "agent-upload" ? { ...agent, status: "running", output: "正在通过 /api/data-sources 上传真实 demo CSV..." } : agent));
+      setDemoAgents((cur) => cur.map((agent) => agent.id === "agent-upload" ? { ...agent, status: "running", output: "正在通过 /api/data-sources 上传 demo CSV 并登记 dataSourceId..." } : agent));
       const dataSource = await uploadDataSource(config.scenario, makeDemoFile(scenario), config.dataNote);
-      setRagFiles([dataSource]);
-      setBackgroundFiles([dataSource]);
+      const workspaceDataSource = dataSourceWithScenario(dataSource, config.scenario);
+      setBackgroundFiles([workspaceDataSource]);
       setDemoAgents((cur) => cur.map((agent) => agent.id === "agent-upload" ? { ...agent, status: "done", output: `已上传 ${dataSource.filename} · dataSourceId ${dataSource.dataSourceId}` } : agent));
       setMessages((cur) => [
         ...cur,
         {
           id: makeId("system"),
           role: "system",
-          content: `真实资料已上传：${dataSource.filename} · dataSourceId ${dataSource.dataSourceId}`,
+          content: `资料已上传并登记：${dataSource.filename} · dataSourceId ${dataSource.dataSourceId}`,
         },
       ]);
 
@@ -459,45 +563,80 @@ export function WorkspacePage() {
   const startLearning = async () => {
     setWorkspaceError(null);
     setIsLearning(true);
-    setMessages((cur) => [
-      ...cur,
+    const scenario = activeWorkflowScenario;
+    const config = WORKSPACE_DEMOS[scenario];
+    const dataSource = pickWorkflowDataSource(config.scenario, backgroundFiles);
+    const sequence = workflowSequenceForDemo(scenario);
+    const agents = freshDemoAgents();
+    setDemoScenario(scenario);
+    setDemoAgents(agents);
+    setDemoAgents((cur) =>
+      cur.map((agent) =>
+        agent.id === "agent-upload"
+          ? {
+              ...agent,
+              status: "done",
+              output: dataSource
+                ? `使用已上传资料 ${dataSource.filename} · ${dataSource.scenario} · dataSourceId ${dataSource.dataSourceId}`
+                : `${config.title} 未选择匹配资料，本次 job request 不携带 dataSourceId；后端按 ${sequence} 默认资料路径运行。`,
+            }
+          : agent
+      )
+    );
+    setMessages([
       {
         id: makeId("system"),
         role: "system",
-        content: "已启动 office_demo 规则学习与资料归档工作流，完成后会把规则组和资料源同步到工作台。",
+        content: dataSource
+          ? `已选择 ${dataSource.filename}，启动 ${sequence} 控制台同款工作流。完成后会把 ${config.title} 规则组同步到工作台，然后再输入问题生成回答。`
+          : `未选择匹配资料，启动 ${sequence} 控制台同款工作流；本次 job request 不携带 dataSourceId，后端按默认资料路径运行。完成后会把 ${config.title} 规则组同步到工作台，然后再输入问题生成回答。`,
       },
     ]);
     try {
-      const dataSourceId = ragFiles[0]?.dataSourceId ?? backgroundFiles[0]?.dataSourceId;
-      const jobId = await startOfficeWorkflow({
-        dataSourceId,
-        validationDataSourceId: dataSourceId,
-        question: input || "基于当前规则包与上传资料生成核查上下文。",
+      const jobId = await startWorkflowJob(sequence, {
+        ...(dataSource
+          ? {
+              dataSourceId: dataSource.dataSourceId,
+              validationDataSourceId: dataSource.dataSourceId,
+            }
+          : {}),
       });
-      const job = await waitForWorkflowJob(jobId, { attempts: 40, delayMs: 800 });
+      let job = await fetchWorkflowJob(jobId);
+      for (let attempt = 0; attempt < 80; attempt += 1) {
+        job = await fetchWorkflowJob(jobId);
+        setLearnJob(job);
+        setDemoAgents((cur) => agentsFromJobEvents(job.events, cur));
+        if (job.status === "done" || job.status === "failed") break;
+        await new Promise((resolve) => window.setTimeout(resolve, 650));
+      }
       setLearnJob(job);
       if (job.status === "failed") {
-        throw new Error(job.error || "office workflow failed");
+        throw new Error(job.error || `${sequence} workflow failed`);
+      }
+      if (job.status !== "done" || !job.result) {
+        throw new Error(`workflow did not finish: ${job.status}`);
       }
       const nextPackName = job.result?.ruleset_id
-        ? `办公室综合规则包·${job.result.ruleset_id.slice(0, 6)}`
-        : "办公室综合规则包";
+        ? `${config.pack.name}·${job.result.ruleset_id.slice(0, 6)}`
+        : config.pack.name;
       const nextPack: RulePack = {
-        id: `office-${job.jobId}`,
+        id: `${scenario}-${job.jobId}`,
         name: nextPackName,
         kind: "custom",
-        version: "v1.0",
-        icon: "custom",
+        version: config.pack.version,
+        icon: config.pack.icon,
         rules: (job.result?.rules ?? []).slice(0, 5).map((rule) => rule.text || rule.rule_id),
       };
       setRulePacks((cur) => [nextPack, ...cur]);
       setSelectedPackId(nextPack.id);
+      const completionText = `${config.title} 规则学习完成：${job.result?.rules?.length ?? 0} 条规则、${job.result?.cards?.length ?? 0} 张规则卡已归档。现在可以用 ${nextPack.name} 提问。`;
+      setDemoAgents((cur) => finalizeLearningAgents(job.events, cur, completionText));
       setMessages((cur) => [
         ...cur,
         {
           id: makeId("assistant"),
           role: "assistant",
-          content: `规则学习完成：${job.result?.rules?.length ?? 0} 条规则、${job.result?.cards?.length ?? 0} 张规则卡已归档。现在可以用 ${nextPack.name} 提问。`,
+          content: completionText,
         },
       ]);
     } catch (error) {
@@ -512,26 +651,27 @@ export function WorkspacePage() {
     }
   };
 
-  const uploadFile = async (file: File, kind: "rag" | "background") => {
+  const uploadFile = async (file: File) => {
     setWorkspaceError(null);
-    setIsUploading(kind);
+    setIsUploading(true);
     try {
-      const result = await uploadOfficeDataSource(file, kind === "rag" ? "workspace-rag" : "workspace-background");
-      if (kind === "rag") setRagFiles((cur) => [result, ...cur]);
-      else setBackgroundFiles((cur) => [result, ...cur]);
+      const scenario = WORKSPACE_DEMOS[demoScenario].scenario;
+      const result = await uploadDataSource(scenario, file, "workspace-background");
+      const workspaceDataSource = dataSourceWithScenario(result, scenario);
+      setBackgroundFiles((cur) => [workspaceDataSource, ...cur]);
       setMessages((cur) => [
         ...cur,
         {
           id: makeId("system"),
           role: "system",
-          content: `${kind === "rag" ? "RAG资料" : "背景资料"}已上传：${result.filename} · dataSourceId ${result.dataSourceId}`,
+          content: `背景资料已上传并登记：${result.filename} · ${scenario} · dataSourceId ${result.dataSourceId}`,
         },
       ]);
     } catch (error) {
       const text = error instanceof Error ? error.message : String(error);
       setWorkspaceError(text);
     } finally {
-      setIsUploading(null);
+      setIsUploading(false);
     }
   };
 
@@ -543,39 +683,133 @@ export function WorkspacePage() {
     setIsChatting(true);
     const userMessage: Message = { id: makeId("user"), role: "user", content: message };
     setMessages((cur) => [...cur, userMessage]);
+    const scenario = activeWorkflowScenario;
+    const config = WORKSPACE_DEMOS[scenario];
+    const sequence = reportSequenceForDemo(scenario);
+    const dataSource = pickWorkflowDataSource(config.scenario, backgroundFiles);
+    const agents = freshDemoAgents();
+    setDemoAgents(agents);
+    setDemoAgents((cur) =>
+      cur.map((agent) =>
+        agent.id === "agent-upload"
+          ? {
+              ...agent,
+              status: "done",
+              output: dataSource
+                ? `使用已上传资料 ${dataSource.filename} · dataSourceId ${dataSource.dataSourceId}`
+                : `${config.title} 未选择匹配资料，本次 job request 不携带 dataSourceId；后端按 ${sequence} 默认资料路径运行。`,
+            }
+          : agent
+      )
+    );
     try {
-      const result = await sendConstrainedChatMessage({
-        conversationId: selectedTask.id,
-        rulesetId: learnJob?.result?.ruleset_id ?? selectedPack.id,
-        message,
-        systemPrompt: `当前规则包：${selectedPack.name}。RAG资料：${uploadedNames.join("、") || "未上传"}`,
-        ragFiles: uploadedNames,
-      });
+      setDemoAgents((cur) =>
+        cur.map((agent) =>
+          agent.id === "agent-answer"
+            ? { ...agent, status: "running", output: `正在提交 ${sequence} 后端 workflow，生成 B 轨结果...` }
+            : agent
+        )
+      );
+      const workflowPayload = {
+        ...(dataSource
+          ? {
+              dataSourceId: dataSource.dataSourceId,
+              validationDataSourceId: dataSource.dataSourceId,
+            }
+          : {}),
+        question: message,
+        reportPrompt: message,
+      };
+      const jobId = await startWorkflowJob(sequence, workflowPayload);
+      setMessages((cur) => [
+        ...cur,
+        {
+          id: makeId("system"),
+          role: "system",
+          content: `后端 ${sequence} job 已创建：${jobId}`,
+        },
+      ]);
+
+      let job = await fetchWorkflowJob(jobId);
+      for (let attempt = 0; attempt < 80; attempt += 1) {
+        job = await fetchWorkflowJob(jobId);
+        setLearnJob(job);
+        setDemoAgents((cur) => agentsFromJobEvents(job.events, cur));
+        if (job.status === "done" || job.status === "failed") break;
+        await new Promise((resolve) => window.setTimeout(resolve, 650));
+      }
+      setLearnJob(job);
+      if (job.status === "failed") {
+        throw new Error(job.error || "workflow failed");
+      }
+      if (job.status !== "done" || !job.result) {
+        throw new Error(`workflow did not finish: ${job.status}`);
+      }
+
+      const result = buildResultFromJob(job, config, dataSource);
+      setDemoAgents((cur) => finalizeAgents(job.events, cur, result));
       setMessages((cur) => [
         ...cur,
         {
           id: result.messageId || makeId("assistant"),
           role: "assistant",
-          content: result.content || result.reply || "后端已完成受约束回答，但没有返回正文。",
+          content: result.content || "后端真实 B 轨 workflow 已完成。",
           result,
         },
       ]);
-      if (!tasks.some((task) => task.name === selectedTask.name && task.id !== selectedTask.id)) {
-        setTasks((cur) =>
-          cur.map((task) =>
-            task.id === selectedTask.id
-              ? { ...task, time: "刚刚", summary: result.flagged_numbers?.length ? `${result.flagged_numbers.length} 待核实` : task.summary }
-              : task
+      const violations = resultViolations(job);
+      setTasks((cur) =>
+        cur.map((task) =>
+          task.id === selectedTask.id
+            ? {
+                ...task,
+                time: "刚刚",
+                status: violations.length ? "bad" : "ok",
+                summary: violations.length ? `${violations.length} 违规` : "全部通过",
+              }
+            : task
+        )
+      );
+    } catch (workflowError) {
+      const workflowText = workflowError instanceof Error ? workflowError.message : String(workflowError);
+      try {
+        const result = await sendConstrainedChatMessage({
+          conversationId: selectedTask.id,
+          scenario: config.scenario,
+          rulesetId: learnJob?.result?.ruleset_id ?? selectedPack.id,
+          message,
+          systemPrompt: `当前规则包：${selectedPack.name}。背景资料：${uploadedNames.join("、") || "未上传"}`,
+          ragFiles: uploadedNames,
+          dataSourceId: dataSource?.dataSourceId,
+          validationDataSourceId: dataSource?.dataSourceId,
+        });
+        result.checks = [`真实 workflow 未完成，已降级到受约束问答：${workflowText}`, ...(result.checks ?? [])];
+        setMessages((cur) => [
+          ...cur,
+          {
+            id: result.messageId || makeId("assistant"),
+            role: "assistant",
+            content: result.content || result.reply || "后端已完成受约束回答，但没有返回正文。",
+            result,
+          },
+        ]);
+        setDemoAgents((cur) =>
+          cur.map((agent) =>
+            agent.id === "agent-answer"
+              ? { ...agent, status: "done", output: result.content || result.reply || "受约束问答已返回。" }
+              : agent.status === "pending"
+                ? { ...agent, status: "done", output: agent.output ?? "降级问答未执行该阶段。" }
+                : agent
           )
         );
+      } catch (error) {
+        const text = error instanceof Error ? error.message : String(error);
+        setWorkspaceError(text);
+        setMessages((cur) => [
+          ...cur,
+          { id: makeId("system"), role: "system", content: `工作台真实问答失败：${text}` },
+        ]);
       }
-    } catch (error) {
-      const text = error instanceof Error ? error.message : String(error);
-      setWorkspaceError(text);
-      setMessages((cur) => [
-        ...cur,
-        { id: makeId("system"), role: "system", content: `受约束问答失败：${text}` },
-      ]);
     } finally {
       setIsChatting(false);
     }
@@ -691,14 +925,14 @@ export function WorkspacePage() {
         </header>
 
         <div className="workspace-messages">
+          {demoAgents.length > 0 && <WorkspaceAgentRun agents={demoAgents} />}
           {messages.map((message) => (
             <ChatMessage key={message.id} message={message} selectedPack={selectedPack} />
           ))}
-          {demoAgents.length > 0 && <WorkspaceAgentRun agents={demoAgents} />}
           {(isChatting || isAutoDemo) && (
             <div className="workspace-thinking">
               <Loader2 size={16} />
-              {isAutoDemo ? "多 Agent 正在自动执行..." : "正在调用受约束问答..."}
+              {isAutoDemo ? "多 Agent 正在自动执行..." : "正在调用真实后端 workflow..."}
             </div>
           )}
           <div ref={messagesEndRef} />
@@ -722,30 +956,15 @@ export function WorkspacePage() {
                 ))}
               </select>
             </label>
-            <button type="button" onClick={() => ragInputRef.current?.click()}>
-              <Paperclip size={13} />
-              {isUploading === "rag" ? "上传中..." : `RAG资料 ${ragFiles.length}`}
-            </button>
             <button type="button" onClick={() => backgroundInputRef.current?.click()}>
               <FileText size={13} />
-              {isUploading === "background" ? "上传中..." : `背景资料 ${backgroundFiles.length}`}
+              {isUploading ? "上传中..." : `背景资料 ${backgroundFiles.length}`}
             </button>
             <button type="button" onClick={startLearning} disabled={isLearning}>
               {isLearning ? <Loader2 size={13} /> : <Sparkles size={13} />}
               {isLearning ? "学习中" : "学习规则"}
             </button>
           </div>
-          <input
-            ref={ragInputRef}
-            hidden
-            type="file"
-            accept=".csv,.json,.txt,.md,.pdf,.doc,.docx"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.currentTarget.value = "";
-              if (file) void uploadFile(file, "rag");
-            }}
-          />
           <input
             ref={backgroundInputRef}
             hidden
@@ -754,12 +973,12 @@ export function WorkspacePage() {
             onChange={(event) => {
               const file = event.target.files?.[0];
               event.currentTarget.value = "";
-              if (file) void uploadFile(file, "background");
+              if (file) void uploadFile(file);
             }}
           />
           <div className="workspace-file-row">
-            {[...ragFiles.map((file) => ({ ...file, kind: "RAG" })), ...backgroundFiles.map((file) => ({ ...file, kind: "背景" }))].map((file) => (
-              <span key={`${file.kind}-${file.dataSourceId}`}>{file.kind}: {file.filename}</span>
+            {backgroundFiles.map((file) => (
+              <span key={file.dataSourceId}>背景: {file.filename}</span>
             ))}
           </div>
           <div className="workspace-input-row">
@@ -772,7 +991,7 @@ export function WorkspacePage() {
                   void sendMessage();
                 }
               }}
-              placeholder="选择规则集 + RAG资料 + 背景资料后提问..."
+              placeholder="选择规则集 + 背景资料后提问..."
             />
             <button type="button" onClick={sendMessage} disabled={!input.trim() || isChatting}>
               <ArrowUp size={17} />
@@ -870,6 +1089,25 @@ function ChatMessage({ message, selectedPack }: { message: Message; selectedPack
       ) : (
         <article className="workspace-result-card">
           <p>{message.content}</p>
+          {message.result?.trackBMarkdown ? (
+            <section className="workspace-b-track">
+              <header>
+                <strong>B 轨 · 规则约束输出</strong>
+                {message.result.dualTitle && <span>{message.result.dualTitle}</span>}
+              </header>
+              <MarkdownBlock text={message.result.trackBMarkdown} />
+            </section>
+          ) : null}
+          {message.result?.interventionLog?.length ? (
+            <section className="workspace-intervention-log">
+              <strong>规则核查与修正日志</strong>
+              <ul>
+                {message.result.interventionLog.map((line, index) => (
+                  <li key={`${index}-${line}`}>{line}</li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
           {message.result?.checks?.length ? (
             <ul>
               {message.result.checks.map((check) => (

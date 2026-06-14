@@ -6,7 +6,11 @@ import { MarkdownBlock } from "../components/MarkdownBlock";
 import { ScenarioRunPanel } from "../components/ScenarioRunPanel";
 import { DataSourceUploadBox, type UploadedDataSource } from "../components/DataSourceUploadBox";
 import { mergeRuleCards } from "../lib/resultAdapters";
-import type { WorkflowStartPayload } from "../lib/apiClient";
+import {
+  collectWorkflowDataSourceUsage,
+  type WorkflowJobStatus,
+  type WorkflowStartPayload,
+} from "../lib/apiClient";
 import type { WorkflowJobResult } from "../lib/events";
 import type { DualReport as ApiDualReport, Violation } from "../types/api";
 import {
@@ -35,6 +39,8 @@ export function FinanceDemoPage() {
   const [liveResult, setLiveResult] = useState<WorkflowJobResult | null>(null);
   const [validationResult, setValidationResult] = useState<WorkflowJobResult | null>(null);
   const [dualResult, setDualResult] = useState<WorkflowJobResult | null>(null);
+  const [validationJob, setValidationJob] = useState<WorkflowJobStatus | null>(null);
+  const [dualJob, setDualJob] = useState<WorkflowJobStatus | null>(null);
   const [auditSource, setAuditSource] = useState<UploadedDataSource | null>(null);
   const [reportQuestion, setReportQuestion] = useState(FINANCE_SCENARIO_QUESTION);
   const [demoError, setDemoError] = useState<string | null>(null);
@@ -69,6 +75,8 @@ export function FinanceDemoPage() {
         setAuditSource(ds);
         setValidationResult(null);
         setDualResult(null);
+        setValidationJob(null);
+        setDualJob(null);
         await delay(DEMO_PACING.afterUpload);
         setStep("faults");
         await delay(DEMO_PACING.beforeValidate);
@@ -152,6 +160,8 @@ export function FinanceDemoPage() {
               setAuditSource(source);
               setValidationResult(null);
               setDualResult(null);
+              setValidationJob(null);
+              setDualJob(null);
             }}
             onNext={() => setStep("faults")}
           />
@@ -167,8 +177,12 @@ export function FinanceDemoPage() {
                 dataSourceId: auditSource.dataSourceId,
                 validationDataSourceId: auditSource.dataSourceId,
               }}
-              onResult={(result) => {
+              dataSourceNotice={formatDataSourceJobNotice(validationJob ?? validationResult, auditSource)}
+              onResult={(result, job) => {
+                setValidationJob(job);
                 setValidationResult(result);
+                setDualResult(null);
+                setDualJob(null);
                 setLiveResult(result);
                 gatesRef.current?.validate.resolve(result);
               }}
@@ -217,7 +231,8 @@ export function FinanceDemoPage() {
                 validationDataSourceId: auditSource.dataSourceId,
               }}
               autoRunToken={dualToken}
-              onResult={(result) => {
+              onResult={(result, job) => {
+                setDualJob(job);
                 setDualResult(result);
                 setLiveResult(result);
                 gatesRef.current?.dual.resolve(result);
@@ -239,6 +254,7 @@ export function FinanceDemoPage() {
               dual={dualResult?.dual}
               sourceLabel={auditSourceLabel}
               question={reportQuestion}
+              dataSourceNotice={formatDataSourceJobNotice(dualJob ?? dualResult, auditSource)}
             />
           ) : (
             <EmptyLiveState
@@ -255,6 +271,28 @@ export function FinanceDemoPage() {
 function formatUploadedSource(source: UploadedDataSource | null): string {
   if (!source) return "尚未上传待审资料";
   return `${source.filename} · dataSourceId ${source.dataSourceId}`;
+}
+
+function formatDataSourceJobNotice(
+  jobOrResult: WorkflowJobStatus | WorkflowJobResult | null | undefined,
+  source: UploadedDataSource | null
+): string {
+  const usage = collectWorkflowDataSourceUsage(jobOrResult ?? null);
+  const requestEntries = [
+    ["dataSourceId", usage.request.dataSourceId],
+    ["trainingDataSourceId", usage.request.trainingDataSourceId],
+    ["validationDataSourceId", usage.request.validationDataSourceId],
+  ].filter((entry): entry is [string, string] => Boolean(entry[1]));
+  if (requestEntries.length > 0) {
+    return `后端 job request 已携带上传资料 ID：${requestEntries.map(([key, value]) => `${key}=${value}`).join("；")}。该 dataSourceId 参与了本次任务入参；页面不额外声称文件内容已被解析。`;
+  }
+  if (usage.resultRefs.length > 0) {
+    return `后端 result 返回数据源引用：${usage.resultRefs.map((ref) => `${ref.purpose}=${ref.id}${ref.filename ? ` (${ref.filename})` : ""}`).join("；")}。`;
+  }
+  if (source) {
+    return `文件已上传并登记为 dataSourceId ${source.dataSourceId}；运行核查后再根据 job request/result 确认它是否参与本次任务。`;
+  }
+  return "尚未选择待审资料。";
 }
 
 function isAbortError(err: unknown): boolean {
@@ -380,14 +418,14 @@ function UploadMaterialStep({
       <DataSourceUploadBox
         scenario="finance_v1"
         title="选择财务资料文件"
-        description="支持 CSV、Excel、PDF、Word、TXT、JSON。当前版本会保存文件并登记 dataSourceId，后续核查仍使用 W4 固定管线结果展示。"
-        accept=".csv,.xlsx,.xls,.pdf,.doc,.docx,.txt,.json"
+        description="支持 CSV、JSON、TXT 结构化财务资料。上传成功只表示文件已保存并登记 dataSourceId；核查是否使用该 ID 以 job request/result 为准。"
+        accept=".csv,.json,.txt"
         note="finance-audit-material"
         uploaded={uploaded}
         onUploaded={onUploaded}
       />
       <p className="upload-note">
-        点击“选择并上传资料”会打开系统文件选择框。资料上传后才能进入规则核查；当前 W4 后端会保存上传资料并登记 dataSourceId，核查展示复用稳定管线结果。
+        {formatDataSourceJobNotice(null, uploaded)}
       </p>
       <button className="btn btn-primary" disabled={!uploaded} onClick={onNext}>
         {uploaded ? "进入规则核查 →" : "请先上传资料"}
@@ -402,6 +440,7 @@ function FaultCards({
   sourceLabel,
   autoStartToken,
   requestPayload,
+  dataSourceNotice,
   onResult,
   onError,
   onNext,
@@ -411,7 +450,8 @@ function FaultCards({
   sourceLabel: string;
   autoStartToken?: number;
   requestPayload: WorkflowStartPayload;
-  onResult: (result: WorkflowJobResult) => void;
+  dataSourceNotice: string;
+  onResult: (result: WorkflowJobResult, job: WorkflowJobStatus) => void;
   onError?: (err: unknown) => void;
   onNext: () => void;
 }) {
@@ -438,6 +478,7 @@ function FaultCards({
           {sourceLabel} · {violations.length} 条违规来自 contracts.Violation
         </span>
       </div>
+      <p className="upload-note">{dataSourceNotice}</p>
       <div className="workflow-actions">
         <button className="btn btn-primary" disabled={running} onClick={startValidation}>
           {running ? "规则核查运行中…" : "运行资料规则核查"}
@@ -590,10 +631,12 @@ function ReportStep({
   dual,
   sourceLabel,
   question,
+  dataSourceNotice,
 }: {
   dual?: ApiDualReport | null;
   sourceLabel: string;
   question: string;
+  dataSourceNotice: string;
 }) {
   if (dual) {
     const href = buildReportDownloadHref(dual, sourceLabel, question);
@@ -605,6 +648,7 @@ function ReportStep({
           <p className="upload-note">
             资料：{sourceLabel}。报告问题：{question}
           </p>
+          <p className="upload-note">{dataSourceNotice}</p>
           <a className="btn btn-outline" href={href} download="finance-dual-report.md">
             下载报告 Markdown
           </a>

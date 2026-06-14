@@ -1,11 +1,12 @@
 # pyproject.toml — netnomos-forge 包元数据与依赖声明（Server-Dev 维护）
 # 宿主机：uv sync && uv run uvicorn server.app:create_app --factory --port 8000 --reload
-# 本地路径依赖：netnomos/lejit 经 [tool.uv.sources] 指向同级仓库（参考 LeJIT/pyproject.toml 的写法）
+# 本地路径依赖：netnomos/lejit 经 [tool.uv.sources] 指向仓库内源码目录。
 [project]
 name = "netnomos-forge"
 version = "0.1.0"
 description = "NetNomos/LeJIT 产品化演示：规则自发现 + 约束生成 + 双轨合规报告"
 readme = "README.md"
+license = "PolyForm-Noncommercial-1.0.0"
 requires-python = ">=3.10"
 dependencies = [
   "fastapi>=0.115.0",
@@ -33,9 +34,9 @@ packages = ["forge", "server"]
 package = true
 
 [tool.uv.sources]
-# 目录约定：<workspace>/netnomos-forge 与 NetNomos、LeJIT 同级
-netnomos = { path = "../NetNomos", editable = true }
-lejit = { path = "../LeJIT", editable = true }
+# 目录约定：NetNomos、LeJIT 随本仓库一起放在 netnomos-forge 根目录下
+netnomos = { path = "NetNomos", editable = true }
+lejit = { path = "LeJIT", editable = true }
 torch = { index = "pytorch-cu128" }
 
 [[tool.uv.index]]

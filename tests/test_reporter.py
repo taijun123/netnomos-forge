@@ -108,7 +108,7 @@ class TestFinanceDualReport(unittest.TestCase):
 
 
 class TestNetworkDualReport(unittest.TestCase):
-    """网络双轨：A 轨确定性带错样本 / B 轨 LeJIT 或预置合规样本."""
+    """网络双轨：A 轨确定性带错样本 / B 轨 LeJIT 筛选后 0 违规."""
 
     @classmethod
     def setUpClass(cls):
@@ -123,16 +123,14 @@ class TestNetworkDualReport(unittest.TestCase):
         self.assertGreaterEqual(len(self.dual.track_a.violations), 3)
         self.assertIn('class="err', self.dual.diff_html)
 
-    def test_track_b_zero_violations_with_fallback_note(self):
+    def test_track_b_zero_violations_with_lejit_note(self):
         self.assertEqual(self.dual.track_b.violations, [])
         log_text = "\n".join(self.dual.track_b.intervention_log)
-        self.assertTrue(
-            "sample_b.json" in log_text or "LeJIT 约束解码生成" in log_text,
-            log_text,
-        )
+        self.assertIn("LeJIT", log_text)
+        self.assertNotIn("sample_b.json", log_text)
         self.assertIn("0 违规", log_text)
 
-    def test_sample_b_rows_compliant(self):
+    def test_track_b_rows_compliant_without_sample_fallback(self):
         rows = self.dual.track_b.slots["rows"]
         self.assertEqual(len(rows), 10)
         self.assertEqual(check_netflow_rows(rows), [])

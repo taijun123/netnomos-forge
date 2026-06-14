@@ -1,5 +1,7 @@
 # NetNomos Forge
 
+[English](README.md) | [中文](README.zh-CN.md)
+
 NetNomos Forge is a productization demo that combines **NetNomos rule discovery**, **LeJIT constrained generation**, **RAG-based rule explanation**, and a **dual-track compliance report workflow**.
 
 The project turns domain data into reusable rules, explains those rules in business language, checks new material against the rules, and compares unconstrained model output with rule-constrained output.
@@ -9,7 +11,10 @@ Current W4 demos cover two vertical scenarios:
 - **Network traffic**: CIDDS-style NetFlow rule discovery and constrained A/B generation.
 - **Finance**: synthetic financial statements, injected accounting errors, rule validation, value projection, and A/B report comparison.
 
-Chinese README: [README.zh-CN.md](README.zh-CN.md)
+## Documentation
+
+- [Project architecture](framework.md): Web frontend, FastAPI backend, core SDK, NetNomos, LeJIT, RAG/LLM, and scenario workflows.
+- [Local run guide](LOCAL_RUN_GUIDE.md): Step-by-step setup from cloning/pulling the repositories to running the backend, frontend, and demos locally.
 
 ## What It Demonstrates
 
@@ -58,23 +63,27 @@ netnomos-forge/
 │   └── rulesets/                  Learned/golden rule assets and LeJIT bundles
 ├── server/                        FastAPI orchestrator, SSE jobs, in-memory store
 ├── web/                           React/Vite product demo UI
+├── NetNomos/                      Vendored NetNomos source dependency
+├── LeJIT/                         Vendored LeJIT source dependency
 ├── demo_artifacts/                Demo upload assets, generated reports, uploaded files
-├── docs/                          API notes, W4 scripts, project reports
 ├── scripts/                       Validation and host helper scripts
 ├── tests/                         Python test suite
-└── agents/                        Multi-agent collaboration notes/config
+└── ...
 ```
 
-Expected workspace layout:
+Expected checkout layout:
 
 ```text
 model_control/
-├── NetNomos/
-├── LeJIT/
 └── netnomos-forge/
+    ├── NetNomos/
+    ├── LeJIT/
+    ├── forge/
+    ├── server/
+    └── web/
 ```
 
-`pyproject.toml` references `../NetNomos` and `../LeJIT` as editable local dependencies.
+`pyproject.toml` references `NetNomos` and `LeJIT` as editable local dependencies inside this repository.
 
 ## Demo Assets
 

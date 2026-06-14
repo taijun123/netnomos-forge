@@ -4,7 +4,7 @@
 覆盖：
 - 财务管线端到端（沙箱真实跑通：生成→注入→validate→修正→双轨报告）；
 - 事件序列：stage 顺序 / agent 映射符合 contracts.STAGE_AGENT / 首尾 status；
-- 网络管线（learn 降级加载 golden 规则文件，B 轨预置合规样本）；
+- 网络管线（learn 降级加载 golden 规则文件，B 轨 LeJIT 生成后终检筛选）；
 - server.app 在沙箱 import 不炸（create_app 懒加载，无 fastapi 时跳过构造）；
 - server.store 的订阅回放与哨兵语义。
 """
@@ -31,6 +31,17 @@ def _first_positions(events: list[WorkflowEvent]) -> dict[str, int]:
     for i, ev in enumerate(events):
         pos.setdefault(ev.stage, i)
     return pos
+
+
+def _custom_finance_frame(cogs: int = 4321):
+    from forge.scenarios.finance_v1.faults import build_clean_package
+
+    df = build_clean_package()
+    mask = df["PeriodIndex"].astype(int) == 3
+    df.loc[mask, "COGS"] = cogs
+    df.loc[mask, "GrossProfit"] = df.loc[mask, "Revenue"].astype(int) - cogs
+    df.loc[mask, "InventoryNetInflow"] = df.loc[mask, "Purchases"].astype(int) - cogs
+    return df
 
 
 class TestFinancePipeline(unittest.TestCase):
@@ -105,6 +116,61 @@ class TestFinancePipeline(unittest.TestCase):
         self.assertFalse(r01_card.is_coincidence)   # 人工规则不被巧合过滤误伤
 
 
+    def test_validate_finance_uses_uploaded_data_source(self):
+        import server.pipeline as pipeline
+        import server.store as storemod
+
+        old_store = storemod._STORE                  # noqa: SLF001
+        old_uploads_dir = pipeline.FINANCE_UPLOADS_DIR
+        storemod._STORE = storemod.JobStore()        # noqa: SLF001
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            upload_root = Path(tmpdir) / "finance_v1"
+            upload_root.mkdir(parents=True)
+            pipeline.FINANCE_UPLOADS_DIR = upload_root
+            uploaded_path = upload_root / "custom-finance.csv"
+            _custom_finance_frame().to_csv(uploaded_path, index=False)
+            try:
+                store = storemod.get_store()
+                data_source_id = store.put_data_source({
+                    "scenario": "finance_v1",
+                    "filename": uploaded_path.name,
+                    "path": str(uploaded_path),
+                    "size": uploaded_path.stat().st_size,
+                    "note": "custom-cogs",
+                })
+                job = store.create_job(
+                    "finance_v1",
+                    "validate-finance",
+                    request_params={
+                        "dataSourceId": data_source_id,
+                        "validationDataSourceId": data_source_id,
+                    },
+                )
+                events: list[WorkflowEvent] = []
+                result = run_finance_pipeline(job, events.append)
+
+                vreport = result["vreport"]
+                slots = result["dual"].track_b.slots
+                self.assertEqual(vreport.total_rows, 8)
+                self.assertEqual(vreport.data_path, str(uploaded_path.resolve()))
+                self.assertEqual(vreport.by_rule, {"R01": 1})
+                self.assertEqual(result["data_source"]["validation"], {
+                    "id": data_source_id,
+                    "filename": uploaded_path.name,
+                })
+                self.assertEqual(slots["data_source"], str(uploaded_path.resolve()))
+                self.assertEqual(slots["cogs_reported"], "4,321")
+                self.assertEqual(slots["cogs_corrected"], "2,000")
+                self.assertEqual(slots["f1_diff"], "+2,321")
+                self.assertNotEqual(slots["cogs_reported"], "3,000")
+                descriptions = "\n".join(event.description for event in events)
+                self.assertIn(f"dataSourceId={data_source_id}", descriptions)
+            finally:
+                pipeline.FINANCE_UPLOADS_DIR = old_uploads_dir
+                storemod._STORE = old_store           # noqa: SLF001
+
+
 class TestNetworkPipeline(unittest.TestCase):
 
     @classmethod
@@ -126,6 +192,7 @@ class TestNetworkPipeline(unittest.TestCase):
         self.assertIn("stage=learn processor=NetNomos hitting-set/Z3", descriptions)
         self.assertIn("stage=explain processor=RuleExplainer/RAG/gemma3 optional",
                       descriptions)
+        self.assertNotIn("沙箱降级读预置合规样本", descriptions)
         self.assertIn("stage=report processor=A轨裸模型+B轨约束", descriptions)
 
     def test_dual_netflow(self):
@@ -340,6 +407,108 @@ class TestServerApp(unittest.TestCase):
                 self.assertTrue(meta["path"].endswith(payload["path"]))
             finally:
                 appmod.UPLOADS_DIR = old_uploads_dir  # noqa: SLF001
+                storemod._STORE = old_store           # noqa: SLF001
+
+    def test_finance_upload_then_learn_preserves_data_source_and_uses_uploaded_csv(self):
+        if find_spec("fastapi") is None:
+            self.skipTest("fastapi not installed")
+
+        from dataclasses import asdict
+
+        import server.app as appmod
+        import server.pipeline as pipeline
+        import server.store as storemod
+        from fastapi.testclient import TestClient
+        from forge.contracts import API_DATA_SOURCES, API_RULESETS_LEARN
+
+        old_store = storemod._STORE                  # noqa: SLF001
+        old_uploads_dir = appmod.UPLOADS_DIR         # noqa: SLF001
+        old_finance_uploads_dir = pipeline.FINANCE_UPLOADS_DIR
+        old_start_job = appmod._start_job            # noqa: SLF001
+        storemod._STORE = storemod.JobStore()        # noqa: SLF001
+        store = storemod.get_store()
+
+        def sync_start_job(
+            scenario: str,
+            sequence: str = "",
+            request_params: dict | None = None,
+        ) -> str:
+            self.assertEqual(scenario, "finance_v1")
+            job = store.create_job(scenario, sequence,
+                                   request_params=request_params)
+            result = run_finance_pipeline(
+                job,
+                lambda event: store.append_event(job.job_id, event),
+                llm=None,
+            )
+            ruleset_id = store.put_ruleset(result["ruleset"], result["cards"])
+            request_snapshot = dict(job.request_params)
+            store.finish_job(job.job_id, {
+                "ruleset_id": ruleset_id,
+                "dual": asdict(result["dual"]),
+                "cards": [asdict(card) for card in result["cards"]],
+                "rules": [asdict(rule) for rule in result["ruleset"].rules],
+                "violations": [asdict(v) for v in result["vreport"].violations],
+                "vreport": asdict(result["vreport"]),
+                "data_source": result["data_source"],
+                "request": request_snapshot,
+                "requestParams": request_snapshot,
+            })
+            return job.job_id
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            appmod.UPLOADS_DIR = Path(tmpdir)         # noqa: SLF001
+            pipeline.FINANCE_UPLOADS_DIR = Path(tmpdir) / "finance_v1"
+            appmod._start_job = sync_start_job        # noqa: SLF001
+            try:
+                client = TestClient(appmod.create_app())
+                csv_bytes = _custom_finance_frame().to_csv(index=False).encode("utf-8")
+                upload_response = client.post(
+                    API_DATA_SOURCES,
+                    data={"scenario": "finance_v1", "note": "custom-cogs"},
+                    files={"file": ("custom-finance.csv", csv_bytes, "text/csv")},
+                )
+                self.assertEqual(upload_response.status_code, 200, upload_response.text)
+                upload_payload = upload_response.json()
+                data_source_id = upload_payload["dataSourceId"]
+
+                learn_response = client.post(
+                    API_RULESETS_LEARN,
+                    json={
+                        "scenario": "finance_v1",
+                        "sequence": "learn-finance",
+                        "dataSourceId": data_source_id,
+                    },
+                )
+                self.assertEqual(learn_response.status_code, 200, learn_response.text)
+                learn_payload = learn_response.json()
+                expected_request = {"dataSourceId": data_source_id}
+                self.assertEqual(learn_payload["request"], expected_request)
+
+                job_response = client.get(f"/api/jobs/{learn_payload['jobId']}")
+                self.assertEqual(job_response.status_code, 200, job_response.text)
+                job_payload = job_response.json()
+                self.assertEqual(job_payload["request"], expected_request)
+                self.assertEqual(job_payload["requestParams"], expected_request)
+                self.assertEqual(job_payload["result"]["request"], expected_request)
+                self.assertEqual(job_payload["result"]["requestParams"], expected_request)
+                self.assertEqual(job_payload["result"]["data_source"]["validation"], {
+                    "id": data_source_id,
+                    "filename": "custom-finance.csv",
+                })
+                self.assertEqual(job_payload["result"]["vreport"]["by_rule"], {"R01": 1})
+                self.assertEqual(
+                    job_payload["result"]["vreport"]["data_path"],
+                    str(Path(upload_payload["path"]).resolve()),
+                )
+                slots = job_payload["result"]["dual"]["track_b"]["slots"]
+                self.assertEqual(slots["cogs_reported"], "4,321")
+                self.assertEqual(slots["cogs_corrected"], "2,000")
+                self.assertNotEqual(slots["cogs_reported"], "3,000")
+            finally:
+                appmod._start_job = old_start_job     # noqa: SLF001
+                appmod.UPLOADS_DIR = old_uploads_dir  # noqa: SLF001
+                pipeline.FINANCE_UPLOADS_DIR = old_finance_uploads_dir
                 storemod._STORE = old_store           # noqa: SLF001
 
     def test_learn_post_and_job_result_endpoint(self):

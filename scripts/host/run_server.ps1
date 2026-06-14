@@ -1,6 +1,6 @@
 # run_server.ps1 — 宿主机一键启动 FastAPI 编排服务
 # 用法：powershell -ExecutionPolicy Bypass -File scripts\host\run_server.ps1
-# 目录约定：<workspace>\netnomos-forge 与 NetNomos、LeJIT 同级（uv.sources 本地路径依赖）
+# 目录约定：NetNomos、LeJIT 随本仓库放在 netnomos-forge 根目录下
 param(
     [int]$Port = 8000,
     [switch]$NoReload                          # 演示录屏时可关掉热重载
@@ -8,11 +8,11 @@ param(
 $ErrorActionPreference = "Stop"
 
 $ForgeRoot = (Resolve-Path "$PSScriptRoot\..\..").Path          # netnomos-forge\
-$Workspace = (Resolve-Path "$ForgeRoot\..").Path                 # <workspace>\
 
 foreach ($repo in @("NetNomos", "LeJIT")) {
-    if (-not (Test-Path (Join-Path $Workspace $repo))) {
-        throw "未找到本地依赖仓库：$Workspace\$repo（需与 netnomos-forge 同级，见 pyproject.toml [tool.uv.sources]）"
+    $repoPath = Join-Path $ForgeRoot $repo
+    if (-not (Test-Path $repoPath)) {
+        throw "未找到本地依赖源码目录：$repoPath（需位于 netnomos-forge 根目录，见 pyproject.toml [tool.uv.sources]）"
     }
 }
 
