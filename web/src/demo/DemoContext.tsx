@@ -2,7 +2,7 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import type { DemoScenario } from "./demoAssets";
 
-export type DemoMode = null | "network" | "finance" | "office";
+export type DemoMode = null | "network" | "finance" | "office" | "workspace";
 
 export interface OfficeSummary {
   scenario: DemoScenario;
@@ -33,7 +33,7 @@ export function DemoProvider({
   navigate,
 }: {
   children: ReactNode;
-  navigate: (r: "network" | "finance" | "office") => void;
+  navigate: (r: "network" | "finance" | "office" | "workspace") => void;
 }) {
   const [mode, setMode] = useState<DemoMode>(null);
   const [officeScenario, setOfficeScenario] = useState<DemoScenario | null>(null);
@@ -43,10 +43,10 @@ export function DemoProvider({
 
   const startDemo = (m: Exclude<DemoMode, null>, sub?: DemoScenario) => {
     setMode(m);
-    setOfficeScenario(m === "office" ? sub ?? "network" : null);
+    setOfficeScenario(m === "office" || m === "workspace" ? sub ?? "network" : null);
     setStatus("running");
     setRunToken((t) => t + 1);
-    navigate(m === "office" ? "office" : m);
+    navigate(m);
   };
 
   const stopDemo = () => {

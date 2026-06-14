@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useState } from "react";
 import type { DemoScenario } from "./demoAssets";
 
-type Mode = "network" | "finance" | "office";
+type Mode = "network" | "finance" | "office" | "workspace";
 
 export function DemoStartMenu({
   variant,
@@ -15,8 +15,12 @@ export function DemoStartMenu({
   includeOffice?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const pickNetwork = () => (variant === "office" ? onPick("office", "network") : onPick("network"));
-  const pickFinance = () => (variant === "office" ? onPick("office", "finance") : onPick("finance"));
+  const choose = (mode: Mode, sub?: DemoScenario) => {
+    setOpen(false);
+    onPick(mode, sub);
+  };
+  const pickNetwork = () => (variant === "office" ? choose("office", "network") : choose("network"));
+  const pickFinance = () => (variant === "office" ? choose("office", "finance") : choose("finance"));
 
   return (
     <div
@@ -46,10 +50,20 @@ export function DemoStartMenu({
               <em>勾稽规则 → 核查 → 修正双轨</em>
             </button>
             {variant === "topnav" && includeOffice && (
-              <button type="button" onClick={() => onPick("office", "network")}>
-                <strong>3D 办公室</strong>
-                <em>多智能体演绎 · 手机群聊看结果</em>
-              </button>
+              <>
+                <button type="button" onClick={() => choose("office", "network")}>
+                  <strong>3D 办公室</strong>
+                  <em>多智能体演绎 · 手机群聊看结果</em>
+                </button>
+                <button type="button" onClick={() => choose("workspace", "network")}>
+                  <strong>工作台 · 网络场景</strong>
+                  <em>RAG 资料 + 规则集 + 多 Agent 自动核查</em>
+                </button>
+                <button type="button" onClick={() => choose("workspace", "finance")}>
+                  <strong>工作台 · 财务场景</strong>
+                  <em>报表资料 + FinGuard + 多 Agent 自动核查</em>
+                </button>
+              </>
             )}
           </motion.div>
         )}
