@@ -50,7 +50,7 @@ log = logging.getLogger("forge.core.reporter")
 FORGE_DIR = Path(__file__).resolve().parents[1]
 FIN_TEMPLATE_PATH = SCENARIO_DIR / "finance_v1" / "report_template.md"
 FORGE_ROOT = FORGE_DIR.parent
-LEJIT_SUBPROCESS_TIMEOUT = 180
+LEJIT_SUBPROCESS_TIMEOUT = int(os.getenv("FORGE_LEJIT_SUBPROCESS_TIMEOUT", "480"))
 
 # 行业英文 → 中文
 INDUSTRY_ZH = {"consulting": "咨询", "retail": "零售", "manufacturing": "制造"}

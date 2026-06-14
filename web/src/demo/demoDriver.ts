@@ -14,7 +14,9 @@ export const DEMO_PACING = {
   beforeDual: 1500,
   afterDual: 2400,
   reportDwell: 3500,
-  gateTimeout: 90000,
+  gateTimeout: 120000,
+  networkGateTimeout: 300000,
+  networkReportGateTimeout: 480000,
 };
 
 export type Delay = (ms: number) => Promise<void>;

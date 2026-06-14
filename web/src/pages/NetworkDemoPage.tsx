@@ -81,7 +81,12 @@ export function NetworkDemoPage() {
         setStep("upload");
         await delay(DEMO_PACING.stepBeat);
         setStep("learn"); // WorkflowLog 挂载即自动跑
-        const learn = await awaitGate(gates.learn, delay, "network learn workflow");
+        const learn = await awaitGate(
+          gates.learn,
+          delay,
+          "network learn workflow",
+          DEMO_PACING.networkGateTimeout
+        );
         setLiveResult(learn);
         await delay(DEMO_PACING.afterLearn);
         setStep("cards");
@@ -95,14 +100,24 @@ export function NetworkDemoPage() {
         setDualJob(null);
         await delay(DEMO_PACING.beforeValidate);
         setValidateToken((x) => x + 1); // 触发新资料核查
-        const val = await awaitGate(gates.validate, delay, "network validation workflow");
+        const val = await awaitGate(
+          gates.validate,
+          delay,
+          "network validation workflow",
+          DEMO_PACING.networkGateTimeout
+        );
         setValidationResult(val);
         setLiveResult(val);
         await delay(DEMO_PACING.afterValidate);
         setStep("dual");
         await delay(DEMO_PACING.beforeDual);
         setDualToken((x) => x + 1); // 触发双轨
-        const dual = await awaitGate(gates.dual, delay, "network report workflow");
+        const dual = await awaitGate(
+          gates.dual,
+          delay,
+          "network report workflow",
+          DEMO_PACING.networkReportGateTimeout
+        );
         setDualResult(dual);
         setLiveResult(dual);
         await delay(DEMO_PACING.afterDual);
