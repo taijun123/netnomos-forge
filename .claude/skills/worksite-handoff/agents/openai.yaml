@@ -1,4 +1,0 @@
-interface:
-  display_name: "Worksite Handoff"
-  short_description: "Capture and restore project working context across AI agents."
-  default_prompt: "Use $worksite-handoff to load the current project handoff, inspect repo and service state, then update the handoff before stopping."
