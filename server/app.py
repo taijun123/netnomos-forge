@@ -44,7 +44,10 @@ log = logging.getLogger("server.app")
 # SSE 队列空轮询超时（秒）：超时发心跳注释行，保持连接
 SSE_POLL_TIMEOUT = 2.0
 # CORS 白名单
-CORS_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
+CORS_ORIGINS = [
+    "http://localhost:5173", "http://127.0.0.1:5173",
+    "http://localhost:5174", "http://127.0.0.1:5174",  # 当前使用的端口
+]
 UPLOADS_DIR = Path(__file__).resolve().parents[1] / "demo_artifacts" / "uploads"
 
 _SCENARIO_PIPELINES = {
@@ -131,10 +134,7 @@ def _safe_upload_name(filename: str) -> str:
 
 def create_app():
     """FastAPI 工厂（fastapi 懒加载）。"""
-<<<<<<< HEAD
-=======
     # ========== 初始化日志系统 ==========
->>>>>>> origin/Jack
     from forge.utils.logging_config import setup_logging  # noqa: PLC0415
 
     setup_logging(
@@ -143,13 +143,6 @@ def create_app():
         json_format=os.getenv("LOG_JSON", "false").lower() == "true",
         max_bytes=int(os.getenv("LOG_MAX_BYTES", str(10 * 1024 * 1024))),
         backup_count=int(os.getenv("LOG_BACKUP_COUNT", "5")),
-<<<<<<< HEAD
-        console_level=os.getenv("LOG_CONSOLE_LEVEL"),
-    )
-    global log
-    log = logging.getLogger("server.app")
-    log.info("NetNomos Forge app initializing")
-=======
         console_level=os.getenv("LOG_CONSOLE_LEVEL", os.getenv("LOG_LEVEL", "INFO")),
     )
 
@@ -157,7 +150,6 @@ def create_app():
     global log
     log = logging.getLogger("server.app")
     log.info("🚀 NetNomos Forge 应用初始化开始...")
->>>>>>> origin/Jack
 
     try:
         from fastapi import FastAPI, HTTPException, Request          # noqa: PLC0415

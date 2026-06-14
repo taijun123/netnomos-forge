@@ -33,9 +33,9 @@ packages = ["forge", "server"]
 package = true
 
 [tool.uv.sources]
-# 目录约定：<workspace>/netnomos-forge 与 NetNomos、LeJIT 同级
-netnomos = { path = "../NetNomos", editable = true }
-lejit = { path = "../LeJIT", editable = true }
+# 目录约定：NetNomos、LeJIT 与 netnomos-forge 同级（修正为当前目录下的符号链接）
+netnomos = { path = "./NetNomos", editable = true }
+lejit = { path = "./LeJIT", editable = true }
 
 [dependency-groups]
 dev = [

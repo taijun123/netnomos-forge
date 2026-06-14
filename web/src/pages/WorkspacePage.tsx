@@ -722,10 +722,11 @@ export function WorkspacePage() {
                 ))}
               </select>
             </label>
-            <button type="button" onClick={() => ragInputRef.current?.click()}>
+            {/* RAG资料上传按钮已隐藏 */}
+            {/* <button type="button" onClick={() => ragInputRef.current?.click()}>
               <Paperclip size={13} />
               {isUploading === "rag" ? "上传中..." : `RAG资料 ${ragFiles.length}`}
-            </button>
+            </button> */}
             <button type="button" onClick={() => backgroundInputRef.current?.click()}>
               <FileText size={13} />
               {isUploading === "background" ? "上传中..." : `背景资料 ${backgroundFiles.length}`}
