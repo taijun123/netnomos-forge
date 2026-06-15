@@ -71,10 +71,10 @@ netnomos-forge/
 └── ...
 ```
 
-推荐检出结构：
+推荐检出结构，其中 `<workspace>` 表示你自己选择的任意本地工作目录：
 
 ```text
-model_control/
+<workspace>/
 └── netnomos-forge/
     ├── NetNomos/
     ├── LeJIT/
@@ -120,10 +120,19 @@ demo_artifacts/w4_demo_assets/network/
 
 ## 快速启动
 
+把仓库 clone 到任意工作目录：
+
+```powershell
+$Workspace = "C:\path\to\workspace"
+New-Item -ItemType Directory -Force -Path $Workspace | Out-Null
+Set-Location $Workspace
+git clone https://github.com/taijun123/netnomos-forge.git
+Set-Location netnomos-forge
+```
+
 安装依赖：
 
 ```powershell
-cd E:\yanchh\model_control\netnomos-forge
 uv sync
 ```
 

@@ -71,10 +71,10 @@ netnomos-forge/
 └── ...
 ```
 
-Expected checkout layout:
+Expected checkout layout, where `<workspace>` is any local directory you choose:
 
 ```text
-model_control/
+<workspace>/
 └── netnomos-forge/
     ├── NetNomos/
     ├── LeJIT/
@@ -120,10 +120,19 @@ demo_artifacts/w4_demo_assets/network/
 
 ## Quick Start
 
+Clone the repository into any workspace:
+
+```powershell
+$Workspace = "C:\path\to\workspace"
+New-Item -ItemType Directory -Force -Path $Workspace | Out-Null
+Set-Location $Workspace
+git clone https://github.com/taijun123/netnomos-forge.git
+Set-Location netnomos-forge
+```
+
 Install dependencies:
 
 ```powershell
-cd E:\yanchh\model_control\netnomos-forge
 uv sync
 ```
 
