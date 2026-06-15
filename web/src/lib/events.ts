@@ -20,6 +20,8 @@ import type { WorkflowJobStatus, WorkflowStartPayload } from "./apiClient";
 export type { WorkflowJobResult, WorkflowJobStatus, WorkflowStartPayload } from "./apiClient";
 import type { MockSequenceId } from "../mock/sse";
 import { logger } from "./logger";
+import { STATIC_DEMO } from "../static-demo/config";
+import { subscribeStaticWorkflow } from "../static-demo/workflow";
 
 export type StreamMode = "live" | "mock";
 
@@ -46,6 +48,9 @@ export function subscribeWorkflow(
   sub: WorkflowSubscription,
   payload: WorkflowStartPayload = {}
 ): WorkflowHandle {
+  if (STATIC_DEMO) {
+    return subscribeStaticWorkflow(sequence, sub, payload);
+  }
   let closed = false;
   let source: EventSource | null = null;
   let handshakeTimer: ReturnType<typeof setTimeout> | null = null;

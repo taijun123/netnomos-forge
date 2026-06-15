@@ -12,6 +12,7 @@ import {
   waitForWorkflowJob,
   workflowEventsUrl,
 } from "../lib/apiClient";
+import { STATIC_DEMO } from "../static-demo/config";
 import { useDemo } from "../demo/DemoContext";
 import { makeDemoFile, NETWORK_QUESTION, FINANCE_QUESTION, type DemoScenario } from "../demo/demoAssets";
 import { autoUpload, makeAbortableDelay } from "../demo/demoDriver";
@@ -330,7 +331,7 @@ export default function App() {
     let active = true;
     let polling = false;
     let pollTimer: number | undefined;
-    const source = new EventSource(workflowEventsUrl(workflowJobId));
+    const source = STATIC_DEMO ? null : new EventSource(workflowEventsUrl(workflowJobId));
 
     const stopPolling = () => {
       if (pollTimer !== undefined) {
@@ -360,11 +361,19 @@ export default function App() {
     const startPolling = () => {
       if (polling) return;
       polling = true;
-      source.close();
+      source?.close();
       void pollWorkflowJob();
     };
 
-    source.addEventListener("workflow", (event) => {
+    if (STATIC_DEMO) {
+      startPolling();
+      return () => {
+        active = false;
+        stopPolling();
+      };
+    }
+
+    source?.addEventListener("workflow", (event) => {
       try {
         const payload = JSON.parse((event as MessageEvent).data) as ForgeWorkflowEvent;
         addEvent({
@@ -378,13 +387,13 @@ export default function App() {
         showBackendError("workflow event parse", error);
       }
     });
-    source.onerror = () => {
+    if (source) source.onerror = () => {
       startPolling();
     };
     return () => {
       active = false;
       stopPolling();
-      source.close();
+      source?.close();
     };
   }, [workflowJobId]);
 

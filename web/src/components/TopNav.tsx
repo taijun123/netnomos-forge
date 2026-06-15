@@ -1,5 +1,6 @@
 import { useDemo } from "../demo/DemoContext";
 import { DemoStartMenu } from "../demo/DemoStartMenu";
+import { assetUrl } from "../static-demo/assets";
 
 export type Route = "intro" | "network" | "finance" | "office" | "workspace" | "log-demo";
 
@@ -23,7 +24,7 @@ export function TopNav({
   return (
     <header className="topnav">
       <button className="topnav-brand" onClick={() => onNavigate("intro")}>
-        <img className="brand-logo" src="/assets/netnomos-forge-logo.png" alt="" aria-hidden="true" />
+        <img className="brand-logo" src={assetUrl("assets/netnomos-forge-logo.png")} alt="" aria-hidden="true" />
         <span className="brand-text">
           <strong>NetNomos Forge</strong>
           <em>规则约束 AI 生成</em>

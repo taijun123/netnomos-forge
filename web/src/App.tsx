@@ -8,6 +8,7 @@ import { WorkspacePage } from "./pages/WorkspacePage";
 import { LogDemoPage } from "./pages/LogDemoPage";
 import { DemoProvider } from "./demo/DemoContext";
 import { LogPanel } from "./components/LogPanel";
+import { STATIC_DEMO, STATIC_DEMO_LABEL, STATIC_DEMO_NOTICE } from "./static-demo/config";
 
 /**
  * 轻量客户端路由：用 hash + 状态切换，不引入 react-router。
@@ -46,6 +47,12 @@ export function App() {
     <DemoProvider navigate={navigate}>
       <div className="app-shell">
         <TopNav route={route} onNavigate={navigate} />
+        {STATIC_DEMO && (
+          <div className="static-demo-banner" role="status">
+            <strong>{STATIC_DEMO_LABEL}</strong>
+            <span>{STATIC_DEMO_NOTICE}</span>
+          </div>
+        )}
         <main className="app-main">
           {route === "intro" && <IntroPage onNavigate={navigate} />}
           {route === "network" && <NetworkDemoPage />}

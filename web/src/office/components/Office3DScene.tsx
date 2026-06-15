@@ -4,6 +4,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { Agent, AgentId, AgentSeat, AgentPose, CourierWaypoint, FurnitureItem } from "../types/domain";
 import { agentSeats3d, courierWaypoints3d, doorways3d, furniture3d, rooms3d } from "../data/office3dData";
 import { createCatAgentRig, updateCatAgentRig, type CatActivity, type CatAgentRig } from "./CatAgentRig";
+import { assetUrl } from "../../static-demo/assets";
 
 // —— 趣味活动轮换状态机 —— 每个 agent 在自己的活动列表里随时间错相轮换，切段头部 10% 做交叉淡入
 const ACTIVITY_PLANS: Record<string, CatActivity[]> = {
@@ -549,12 +550,12 @@ function createTextureKit(): TextureKit {
     return texture;
   };
 
-  const woodDiff = load("/assets/textures/wood_diff.jpg", true);
-  const woodNor = load("/assets/textures/wood_nor.jpg", false);
-  const woodRough = load("/assets/textures/wood_rough.jpg", false);
-  const tileDiff = load("/assets/textures/tile_diff.jpg", true);
-  const tileNor = load("/assets/textures/tile_nor.jpg", false);
-  const tileRough = load("/assets/textures/tile_rough.jpg", false);
+  const woodDiff = load(assetUrl("assets/textures/wood_diff.jpg"), true);
+  const woodNor = load(assetUrl("assets/textures/wood_nor.jpg"), false);
+  const woodRough = load(assetUrl("assets/textures/wood_rough.jpg"), false);
+  const tileDiff = load(assetUrl("assets/textures/tile_diff.jpg"), true);
+  const tileNor = load(assetUrl("assets/textures/tile_nor.jpg"), false);
+  const tileRough = load(assetUrl("assets/textures/tile_rough.jpg"), false);
 
   const repeated = (base: THREE.Texture, rx: number, ry: number) => {
     const texture = base.clone();

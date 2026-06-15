@@ -2,6 +2,18 @@ import { API } from "../types/api";
 import type { DualReport, Rule, RuleCard, Scenario, Violation, WorkflowEvent } from "../types/api";
 import type { MockSequenceId } from "../mock/sse";
 import { logger, wasLogged } from "./logger";
+import { STATIC_DEMO } from "../static-demo/config";
+import {
+  staticFetchWorkflowJob,
+  staticHealthDataUrl,
+  staticRegisterDataSource,
+  staticSendConstrainedChatMessage,
+  staticStartOfficeWorkflow,
+  staticStartWorkflowJob,
+  staticUploadDataSource,
+  staticUploadOfficeRuleset,
+  staticWaitForWorkflowJob,
+} from "../static-demo/workflow";
 
 export interface WorkflowJobResult {
   ruleset_id?: string;
@@ -134,6 +146,9 @@ const SEQUENCE_SCENARIO: Record<MockSequenceId, Scenario> = {
 const latestDataSources = new Map<Scenario, UploadedDataSourceRecord>();
 
 export function apiUrl(path: string): string {
+  if (STATIC_DEMO && path === "/api/health") {
+    return staticHealthDataUrl();
+  }
   return `${API_BASE}${path}`;
 }
 
@@ -321,6 +336,9 @@ export async function startWorkflowJob(
   sequence: MockSequenceId,
   requestPayload: WorkflowStartPayload = {}
 ): Promise<string> {
+  if (STATIC_DEMO) {
+    return staticStartWorkflowJob(sequence, requestPayload);
+  }
   const responsePayload = await requestJson<{ jobId?: string; job_id?: string }>(API.RULESETS_LEARN, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -340,6 +358,16 @@ export async function uploadDataSource(
   file: File,
   note = ""
 ): Promise<DataSourceUploadResult> {
+  if (STATIC_DEMO) {
+    const result = await staticUploadDataSource(scenario, file, note);
+    latestDataSources.set(scenario, {
+      ...result,
+      scenario,
+      note,
+      uploadedAt: Date.now(),
+    });
+    return result;
+  }
   const form = new FormData();
   form.append("scenario", scenario);
   form.append("note", note);
@@ -366,6 +394,9 @@ export async function uploadDataSource(
 }
 
 export async function uploadOfficeRuleset(): Promise<RuleSetUploadResult> {
+  if (STATIC_DEMO) {
+    return staticUploadOfficeRuleset();
+  }
   const raw = await requestJson<Partial<RuleSetUploadResult>>(API.RULESETS_UPLOAD, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -387,6 +418,16 @@ export async function registerOfficeDemoDataSource(
   filename = "demo-pcap-csv-source.csv",
   note = "office demo registered data source"
 ): Promise<DataSourceUploadResult> {
+  if (STATIC_DEMO) {
+    const result = await staticRegisterDataSource("office_demo", filename, note);
+    latestDataSources.set("office_demo", {
+      ...result,
+      scenario: "office_demo",
+      note,
+      uploadedAt: Date.now(),
+    });
+    return result;
+  }
   const raw = await requestJson<Partial<DataSourceUploadResult>>(API.DATA_SOURCES, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -405,6 +446,9 @@ export async function registerOfficeDemoDataSource(
 export async function startOfficeWorkflow(
   requestPayload: WorkflowStartPayload = {}
 ): Promise<string> {
+  if (STATIC_DEMO) {
+    return staticStartOfficeWorkflow(requestPayload);
+  }
   const responsePayload = await requestJson<{ jobId?: string; job_id?: string }>(API.RULESETS_LEARN, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -429,6 +473,9 @@ export async function sendConstrainedChatMessage(payload: {
   dataSourceId?: string;
   validationDataSourceId?: string;
 }): Promise<ConstrainedChatResult> {
+  if (STATIC_DEMO) {
+    return staticSendConstrainedChatMessage(payload);
+  }
   return requestJson<ConstrainedChatResult>(API.CHAT_CONSTRAINED, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -446,6 +493,9 @@ export async function sendConstrainedChatMessage(payload: {
 }
 
 export async function fetchWorkflowJob(jobId: string): Promise<WorkflowJobStatus> {
+  if (STATIC_DEMO) {
+    return staticFetchWorkflowJob(jobId);
+  }
   return normalizeJob(await requestJson<WorkflowJobStatus>(`/api/jobs/${encodeURIComponent(jobId)}`));
 }
 
@@ -453,6 +503,9 @@ export async function waitForWorkflowJob(
   jobId: string,
   options: { attempts?: number; delayMs?: number } = {}
 ): Promise<WorkflowJobStatus> {
+  if (STATIC_DEMO) {
+    return staticWaitForWorkflowJob(jobId, options);
+  }
   const attempts = options.attempts ?? 6;
   const delayMs = options.delayMs ?? 350;
   let lastJob: WorkflowJobStatus | null = null;

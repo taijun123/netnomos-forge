@@ -6,15 +6,16 @@ import type {
   OfficeAsset,
   RoomLayout,
 } from "../types/domain";
+import { assetUrl } from "../../static-demo/assets";
 
 // 真实 PBR 材质（Poly Haven CC0，已下载到本地）
 export const officeAssets: OfficeAsset[] = [
-  { key: "woodDiff", path: "/assets/textures/wood_diff.jpg" },
-  { key: "woodNor", path: "/assets/textures/wood_nor.jpg" },
-  { key: "woodRough", path: "/assets/textures/wood_rough.jpg" },
-  { key: "tileDiff", path: "/assets/textures/tile_diff.jpg" },
-  { key: "tileNor", path: "/assets/textures/tile_nor.jpg" },
-  { key: "tileRough", path: "/assets/textures/tile_rough.jpg" },
+  { key: "woodDiff", path: assetUrl("assets/textures/wood_diff.jpg") },
+  { key: "woodNor", path: assetUrl("assets/textures/wood_nor.jpg") },
+  { key: "woodRough", path: assetUrl("assets/textures/wood_rough.jpg") },
+  { key: "tileDiff", path: assetUrl("assets/textures/tile_diff.jpg") },
+  { key: "tileNor", path: assetUrl("assets/textures/tile_nor.jpg") },
+  { key: "tileRough", path: assetUrl("assets/textures/tile_rough.jpg") },
 ];
 
 // 建筑外壳：x ∈ [-4.6, 7.0]，z ∈ [-3.9, 3.9]；门外收发区在建筑左侧
