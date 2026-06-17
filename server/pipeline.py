@@ -68,6 +68,16 @@ def _ev(emit: Emit, stage: str, status: str, desc: str) -> None:
     emit(WorkflowEvent.make(stage, status, desc))
 
 
+def _runtime_preflight(emit: Emit, scenario: str, *, warm_models: bool = False) -> None:
+    try:
+        from forge.utils.runtime_preflight import emit_preflight_events  # noqa: PLC0415
+        emit_preflight_events(emit, scenario=scenario, warm_models=warm_models)
+    except Exception as exc:  # preflight must never be the reason a workflow fails
+        log.warning("runtime preflight failed: %s", exc)
+        _ev(emit, "control", "done",
+            f"runtime preflight 检查异常：{exc}；workflow 继续执行并使用可用兜底链路。")
+
+
 def _network_vreport(rows: list[dict[str, Any]], data_path: str) -> ViolationReport:
     from forge.core.reporter import check_netflow_rows  # noqa: PLC0415
 
@@ -294,6 +304,7 @@ def run_finance_pipeline(job: Any, emit: Emit, llm=None,
         FinanceValidator, RULE_TEXTS)
 
     _ev(emit, "control", "running", "财务双轨报告任务开始编排。")
+    _runtime_preflight(emit, "finance_v1")
     params = _request_params(job)
     finance_source = _load_finance_data_source(
         str(params.get("validationDataSourceId") or params.get("dataSourceId") or "")
@@ -436,6 +447,7 @@ def run_network_pipeline(job: Any, emit: Emit, llm=None,
     )
 
     _ev(emit, "control", "running", "网络规则自发现任务开始编排。")
+    _runtime_preflight(emit, "network_cidds")
     params = _request_params(job)
     sequence = _job_sequence(job)
     training_source = _load_network_data_source(
@@ -455,6 +467,18 @@ def run_network_pipeline(job: Any, emit: Emit, llm=None,
     }
     if data_source_id and str(data_source_id) not in used_ids:
         _load_network_data_source(str(data_source_id), purpose="dataSourceId")
+
+    def data_source_snapshot() -> dict[str, Any]:
+        return {
+            "training": {
+                "id": training_source["id"],
+                "filename": training_source["filename"],
+            } if training_source else None,
+            "validation": {
+                "id": validation_source["id"],
+                "filename": validation_source["filename"],
+            } if validation_source else None,
+        }
 
     upload_target = (
         training_source["filename"] if training_source
@@ -545,9 +569,23 @@ def run_network_pipeline(job: Any, emit: Emit, llm=None,
         f"规则卡 {len(cards)} 张（疑似巧合 "
         f"{sum(1 for c in cards if c.is_coincidence)} 张）。")
 
+    if sequence == "learn-network":
+        _ev(emit, "control", "done", "network learn sequence done; report and LeJIT skipped.")
+        return {
+            "ruleset": ruleset,
+            "cards": cards,
+            "vreport": None,
+            "dual": None,
+            "violations": [],
+            "data_source": data_source_snapshot(),
+        }
+
     validation_violations = []
     vreport = None
     track_a_rows = None
+    if sequence == "validate-network" and validation_source is None:
+        _ev(emit, "validate", "blocked", "validate-network requires an uploaded validation data source.")
+        raise RuntimeError("validate-network requires dataSourceId or validationDataSourceId")
     track_a_source_label = "裸模型生成"
     if validation_source is not None:
         _ev(emit, "validate", "running",
@@ -559,6 +597,17 @@ def run_network_pipeline(job: Any, emit: Emit, llm=None,
             f"命中 {len(validation_violations)} 处违规。")
         track_a_rows = validation_source["rows"]
         track_a_source_label = f"上传资料 {validation_source['filename']}"
+
+    if sequence == "validate-network":
+        _ev(emit, "control", "done", "network validate sequence done; report and LeJIT skipped.")
+        return {
+            "ruleset": ruleset,
+            "cards": cards,
+            "vreport": vreport,
+            "dual": None,
+            "violations": validation_violations,
+            "data_source": data_source_snapshot(),
+        }
 
     # -- report / diff --------------------------------------------------------------
     if track_a_rows is not None:
@@ -587,16 +636,7 @@ def run_network_pipeline(job: Any, emit: Emit, llm=None,
         "vreport": vreport,
         "dual": dual,
         "violations": validation_violations or dual.track_a.violations,
-        "data_source": {
-            "training": {
-                "id": training_source["id"],
-                "filename": training_source["filename"],
-            } if training_source else None,
-            "validation": {
-                "id": validation_source["id"],
-                "filename": validation_source["filename"],
-            } if validation_source else None,
-        },
+        "data_source": data_source_snapshot(),
     }
 
 
@@ -733,6 +773,7 @@ def run_office_pipeline(job: Any, emit: Emit, llm=None,
                         use_netnomos: bool = False) -> dict[str, Any]:
     """Office control-room pipeline that exposes real backend state to the 3D UI."""
     _ev(emit, "control", "running", "办公室多智能体工作台开始编排。")
+    _runtime_preflight(emit, "office")
     _ev(emit, "upload", "running", "快递B读取当前财务/网络演示资料与用户上传记录。")
 
     store_sources = []
@@ -846,6 +887,7 @@ def run_office_demo_pipeline(job: Any, emit: Emit, llm=None,
         emit(event)
 
     office_emit("control", "running", "office_demo orchestration started for six office agents.")
+    _runtime_preflight(emit, "office_demo")
     office_emit("upload", "running", "Courier B registers finance CSV and CIDDS NetFlow sources.")
     finance = run_finance_pipeline(job, lambda _event: None, llm=llm,
                                    use_netnomos=use_netnomos)

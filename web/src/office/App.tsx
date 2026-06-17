@@ -122,7 +122,7 @@ export default function App() {
   const bootstrapped = useRef(false);
 
   // —— 一键傻瓜演示（办公室）——
-  const { mode, officeScenario, runToken, startDemo, setStatus, setOfficeSummary } = useDemo();
+  const { mode, officeScenario, runToken, startDemo, status, setStatus, setOfficeSummary } = useDemo();
   const [chatInjections, setChatInjections] = useState<ChatMessage[]>([]);
   const injectSeq = useRef(0);
   const demoAbortRef = useRef<AbortController | null>(null);
@@ -316,7 +316,7 @@ export default function App() {
 
   // —— 一键演示：mode=office 且 runToken 自增即触发本场景脚本 ——
   useEffect(() => {
-    if (mode !== "office" || !officeScenario) return;
+    if (mode !== "office" || status !== "running" || runToken === 0 || !officeScenario) return;
     if (runToken === lastOfficeRun.current) return;
     lastOfficeRun.current = runToken;
     bootstrapped.current = true; // 双保险：跳过 bootstrap 的自动 triggerWorkflow
@@ -324,7 +324,7 @@ export default function App() {
     injectSeq.current = 0;
     void runOfficeDemo(officeScenario);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, officeScenario, runToken]);
+  }, [mode, officeScenario, runToken, status]);
 
   useEffect(() => {
     if (!workflowJobId) return;

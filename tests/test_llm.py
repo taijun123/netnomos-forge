@@ -110,5 +110,31 @@ class TestRoutedLLM(unittest.TestCase):
         self.assertIsInstance(CodexBackend().available(), bool)
 
 
+    def test_ollama_payload_uses_keep_alive_zero(self):
+        class _Response:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {"response": "ok"}
+
+        backend = OllamaBackend()
+        with patch("requests.post", return_value=_Response()) as post:
+            self.assertEqual(backend.complete("hello", role="draft", model="m"), "ok")
+        self.assertEqual(post.call_args.kwargs["json"]["keep_alive"], 0)
+
+    def test_ollama_cleanup_stops_demo_models(self):
+        from forge.utils.ollama_lifecycle import cleanup_ollama_after_job
+
+        with patch("forge.utils.ollama_lifecycle.ollama_ready", return_value=True), \
+                patch("forge.utils.ollama_lifecycle.shutil.which", return_value="ollama"), \
+                patch("forge.utils.ollama_lifecycle.subprocess.run") as run:
+            cleanup_ollama_after_job(models=("m1", "m2"), stop_service=False)
+
+        commands = [call.args[0] for call in run.call_args_list]
+        self.assertIn(["ollama", "stop", "m1"], commands)
+        self.assertIn(["ollama", "stop", "m2"], commands)
+
+
 if __name__ == "__main__":
     unittest.main()

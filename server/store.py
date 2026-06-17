@@ -68,6 +68,28 @@ class JobStore:
         with self._lock:
             return self._jobs.get(job_id)
 
+    def find_recent_running_job(
+        self,
+        scenario: str,
+        sequence: str = "",
+        request_params: dict[str, Any] | None = None,
+        max_age_seconds: float = 5.0,
+    ) -> Job | None:
+        target_params = dict(request_params or {})
+        now = time.time()
+        with self._lock:
+            matches = [
+                job for job in self._jobs.values()
+                if job.status == JOB_RUNNING
+                and job.scenario == scenario
+                and job.sequence == sequence
+                and job.request_params == target_params
+                and now - job.created_at <= max_age_seconds
+            ]
+            if not matches:
+                return None
+            return max(matches, key=lambda job: job.created_at)
+
     def append_event(self, job_id: str, event: WorkflowEvent) -> None:
         """登记事件并广播给所有订阅者."""
         with self._lock:

@@ -74,10 +74,15 @@ export function WorkflowLog({
   const total = Math.max(expectedTotal, events.length || expectedTotal);
   const listRef = useRef<HTMLDivElement>(null);
   const startedRef = useRef(false);
+  const startingRef = useRef(false);
+  const runningRef = useRef(false);
   const handleRef = useRef<WorkflowHandle | null>(null);
   const effectivePayload = requestPayload ?? payload ?? {};
 
   const start = () => {
+    if (startingRef.current || runningRef.current) return handleRef.current;
+    startingRef.current = true;
+    runningRef.current = true;
     handleRef.current?.close();
     setEvents([]);
     setMode(null);
@@ -91,6 +96,9 @@ export function WorkflowLog({
       onJobStart: (id) => setJobId(id),
       onMode: (m) => setMode(m),
       onDone: (job) => {
+        startingRef.current = false;
+        runningRef.current = false;
+        handleRef.current = null;
         setRunning(false);
         setDone(true);
         setJobStatus(job?.status ?? null);
@@ -103,6 +111,9 @@ export function WorkflowLog({
         onDone?.(job);
       },
       onError: (err) => {
+        startingRef.current = false;
+        runningRef.current = false;
+        handleRef.current = null;
         setRunning(false);
         setError(err instanceof Error ? err.message : String(err));
         onError?.(err);
@@ -114,12 +125,19 @@ export function WorkflowLog({
 
   useEffect(() => {
     if (!autoStart || startedRef.current) return;
-    startedRef.current = true;
-    const handle = start();
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      if (cancelled || startedRef.current) return;
+      startedRef.current = true;
+      start();
+    }, 25);
     return () => {
-      startedRef.current = false;
-      handle.close();
+      cancelled = true;
+      window.clearTimeout(timer);
+      handleRef.current?.close();
       handleRef.current = null;
+      startingRef.current = false;
+      runningRef.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -2791,15 +2791,34 @@ button {
 
 .artifact-doc {
   margin: 0;
-  padding: 14px;
+  padding: 0;
   border: 1px solid var(--line);
   border-radius: 11px;
   background: #f7f9fb;
   color: #2b343d;
-  font-family: "Consolas", "Menlo", monospace;
-  font-size: 12px;
-  line-height: 1.65;
-  white-space: pre-wrap;
+  overflow: hidden;
+}
+
+.artifact-doc .markdown-block {
+  max-height: 58vh;
+  border: 0;
+  background: transparent;
+  color: #2b343d;
+}
+
+.artifact-doc .markdown-block h3,
+.artifact-doc .markdown-block h4,
+.artifact-doc .markdown-block th {
+  color: #121820;
+}
+
+.artifact-doc .markdown-block code {
+  background: rgba(20, 32, 48, 0.08);
+  color: #111827;
+}
+
+.artifact-doc .markdown-block th {
+  background: rgba(22, 119, 255, 0.08);
 }
 
 /* —— 成员设置弹窗 —— */

@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Boxes, FileText, X } from "lucide-react";
 import { useState } from "react";
+import { MarkdownBlock } from "../../components/MarkdownBlock";
 import { agentNameMap } from "../data/mockData";
 import type { Artifact } from "../types/domain";
 
@@ -55,7 +56,9 @@ export function OutputsModal({ open, artifacts, onClose }: OutputsModalProps) {
 
             {viewing ? (
               <div className="rules-list">
-                <pre className="artifact-doc">{viewing.preview}</pre>
+                <div className="artifact-doc">
+                  <MarkdownBlock text={viewing.preview} />
+                </div>
                 <button className="rules-card-more" onClick={() => setViewing(null)}>
                   ‹ 返回产出物列表
                 </button>

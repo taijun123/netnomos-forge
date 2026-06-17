@@ -76,10 +76,14 @@ class OllamaBackend:
     name = "ollama"
 
     def __init__(self, host: str = "http://localhost:11434", timeout: float | None = None,
-                 probe_timeout: float | None = None):
+                 probe_timeout: float | None = None,
+                 autostart: bool = False):
         self.host = host.rstrip("/")
         self.timeout = timeout or float(os.getenv("FORGE_OLLAMA_TIMEOUT", "120"))
         self.probe_timeout = probe_timeout or float(os.getenv("FORGE_OLLAMA_PROBE_TIMEOUT", "2"))
+        self.autostart = autostart
+        raw_keep_alive = os.getenv("FORGE_OLLAMA_KEEP_ALIVE", "0").strip()
+        self.keep_alive: int | str = int(raw_keep_alive) if raw_keep_alive.isdigit() else raw_keep_alive
         self._available: bool | None = None  # 探测结果缓存
 
     def available(self) -> bool:
@@ -90,6 +94,16 @@ class OllamaBackend:
                 self._available = resp.status_code == 200
             except Exception:
                 self._available = False
+            if not self._available and self.autostart:
+                try:
+                    from forge.utils.ollama_lifecycle import ensure_ollama_running  # noqa: PLC0415
+
+                    ensure_ollama_running(self.host)
+                    import requests
+                    resp = requests.get(f"{self.host}/api/tags", timeout=self.probe_timeout)
+                    self._available = resp.status_code == 200
+                except Exception:
+                    self._available = False
         return self._available
 
     def complete(self, prompt: str, role: str, system: str | None = None,
@@ -105,6 +119,7 @@ class OllamaBackend:
                 "model": model,
                 "messages": messages,
                 "stream": False,
+                "keep_alive": self.keep_alive,
                 "options": options or {},
             }
             resp = requests.post(f"{self.host}/api/chat", json=payload, timeout=self.timeout)
@@ -114,6 +129,7 @@ class OllamaBackend:
             "model": model,
             "prompt": prompt,
             "stream": False,
+            "keep_alive": self.keep_alive,
             "options": options or {},
         }
         if system:
@@ -173,7 +189,8 @@ class RoutedLLM:
     def __init__(self, routing: dict[str, dict[str, Any]] | None = None,
                  force_backend: str | None = None,
                  ollama_host: str | None = None,
-                 backends: dict[str, Any] | None = None):
+                 backends: dict[str, Any] | None = None,
+                 ollama_autostart: bool = False):
         self.routing = routing or _ollama_first_routing()
         self.force_backend = force_backend
         resolved_ollama_host = (
@@ -184,7 +201,8 @@ class RoutedLLM:
         )
         # backends 参数允许测试注入桩后端
         self.backends: dict[str, Any] = backends or {
-            "ollama": OllamaBackend(host=resolved_ollama_host),
+            "ollama": OllamaBackend(host=resolved_ollama_host,
+                                     autostart=ollama_autostart),
             "codex": CodexBackend(),
             "mock": MockBackend(),
         }

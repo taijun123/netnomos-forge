@@ -59,12 +59,13 @@ LEARN_REQUEST_FIELDS = (
     "question",
     "reportPrompt",
 )
+_NETWORK_JOB_LOCK = threading.Lock()
 
 
 def _make_llm():
     """RoutedLLM：宿主机自动探测 ollama/codex，沙箱降级 mock（确定性）."""
     from forge.core.llm import RoutedLLM  # noqa: PLC0415
-    return RoutedLLM()
+    return RoutedLLM(ollama_autostart=True)
 
 
 def _start_job(
@@ -74,13 +75,32 @@ def _start_job(
 ) -> str:
     """后台线程跑管线，事件写入 store；返回 job_id."""
     store = get_store()
+    running = store.find_recent_running_job(
+        scenario,
+        sequence,
+        request_params=request_params,
+        max_age_seconds=5.0,
+    )
+    if running is not None:
+        log.info("reuse running job %s for scenario=%s sequence=%s", running.job_id, scenario, sequence)
+        return running.job_id
     job = store.create_job(scenario, sequence, request_params=request_params)
     pipeline = _SCENARIO_PIPELINES.get(scenario, run_finance_pipeline)
 
     def _run() -> None:
         try:
-            result = pipeline(job, lambda ev: store.append_event(job.job_id, ev),
-                              llm=_make_llm())
+            def _execute_pipeline() -> dict[str, Any]:
+                return pipeline(
+                    job,
+                    lambda ev: store.append_event(job.job_id, ev),
+                    llm=_make_llm(),
+                )
+
+            if scenario.startswith("network"):
+                with _NETWORK_JOB_LOCK:
+                    result = _execute_pipeline()
+            else:
+                result = _execute_pipeline()
             # 登记规则集/卡片/报告，供 cards 与 chat 端点复用
             ruleset_id = store.put_ruleset(result.get("ruleset"),
                                            result.get("cards"))
@@ -118,6 +138,13 @@ def _start_job(
         except Exception as exc:
             log.exception("管线失败：%s", exc)
             store.fail_job(job.job_id, str(exc))
+        finally:
+            try:
+                from forge.utils.ollama_lifecycle import cleanup_ollama_after_job  # noqa: PLC0415
+
+                cleanup_ollama_after_job()
+            except Exception as cleanup_exc:
+                log.warning("Ollama cleanup failed after job %s: %s", job.job_id, cleanup_exc)
 
     threading.Thread(target=_run, daemon=True).start()
     return job.job_id

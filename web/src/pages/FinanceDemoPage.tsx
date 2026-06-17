@@ -46,7 +46,8 @@ export function FinanceDemoPage() {
   const [demoError, setDemoError] = useState<string | null>(null);
 
   // 一键演示：自动驱动整条财务流程
-  const { mode, runToken, setStatus } = useDemo();
+  const { mode, runToken, status, setStatus } = useDemo();
+  const [learnToken, setLearnToken] = useState(0);
   const [faultToken, setFaultToken] = useState(0);
   const [dualToken, setDualToken] = useState(0);
   const gatesRef = useRef<{
@@ -56,7 +57,7 @@ export function FinanceDemoPage() {
   } | null>(null);
 
   useEffect(() => {
-    if (mode !== "finance") return;
+    if (mode !== "finance" || status !== "running" || runToken === 0) return;
     const ac = new AbortController();
     const delay = makeAbortableDelay(ac.signal);
     const gates = { learn: createGate<WorkflowJobResult>(), validate: createGate<WorkflowJobResult>(), dual: createGate<WorkflowJobResult>() };
@@ -67,6 +68,7 @@ export function FinanceDemoPage() {
         setStep("preview");
         await delay(DEMO_PACING.stepBeat);
         setStep("learn");
+        setLearnToken((x) => x + 1);
         const learn = await awaitGate(gates.learn, delay, "finance learn workflow");
         setLiveResult(learn);
         await delay(DEMO_PACING.afterLearn);
@@ -106,7 +108,7 @@ export function FinanceDemoPage() {
     })();
     return () => ac.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, runToken]);
+  }, [mode, runToken, status]);
 
   const ruleCards = useMemo(
     () => mergeRuleCards(liveResult?.cards, liveResult?.rules, []),
@@ -136,6 +138,7 @@ export function FinanceDemoPage() {
           <>
             <WorkflowLog
               sequence="learn-finance"
+              autoStart={status === "running" && mode === "finance" && learnToken > 0}
               title="规则学习 · 事件流"
               onResult={(result) => {
                 setLiveResult(result);

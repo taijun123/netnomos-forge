@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { WorkflowLog } from "./WorkflowLog";
 import {
   workflowPayloadFromLatestDataSource,
@@ -32,8 +32,11 @@ export function ScenarioRunPanel({
   const [runId, setRunId] = useState<number | null>(null);
   const [runPayload, setRunPayload] = useState<WorkflowStartPayload | null>(null);
   const [running, setRunning] = useState(false);
+  const startingRef = useRef(false);
 
   const runScenario = () => {
+    if (startingRef.current || running) return;
+    startingRef.current = true;
     const prompt = question.trim() || recommendedQuestion;
     setRunPayload({
       ...workflowPayloadFromLatestDataSource(sequence, "validation"),
@@ -89,8 +92,15 @@ export function ScenarioRunPanel({
           requestPayload={runPayload ?? undefined}
           title="实时 A/B 双轨执行"
           onResult={onResult}
-          onError={onError}
-          onDone={() => setRunning(false)}
+          onError={(err, job) => {
+            startingRef.current = false;
+            setRunning(false);
+            onError?.(err, job);
+          }}
+          onDone={() => {
+            startingRef.current = false;
+            setRunning(false);
+          }}
         />
       )}
     </section>

@@ -58,7 +58,8 @@ export function NetworkDemoPage() {
   const [demoError, setDemoError] = useState<string | null>(null);
 
   // 一键演示：自动驱动整条网络流程
-  const { mode, runToken, setStatus } = useDemo();
+  const { mode, runToken, status, setStatus } = useDemo();
+  const [learnToken, setLearnToken] = useState(0);
   const [validateToken, setValidateToken] = useState(0);
   const [dualToken, setDualToken] = useState(0);
   const gatesRef = useRef<{
@@ -68,7 +69,7 @@ export function NetworkDemoPage() {
   } | null>(null);
 
   useEffect(() => {
-    if (mode !== "network") return;
+    if (mode !== "network" || status !== "running" || runToken === 0) return;
     const ac = new AbortController();
     const delay = makeAbortableDelay(ac.signal);
     const gates = { learn: createGate<WorkflowJobResult>(), validate: createGate<WorkflowJobResult>(), dual: createGate<WorkflowJobResult>() };
@@ -80,7 +81,8 @@ export function NetworkDemoPage() {
         setLearningSource(null);
         setStep("upload");
         await delay(DEMO_PACING.stepBeat);
-        setStep("learn"); // WorkflowLog 挂载即自动跑
+        setStep("learn");
+        setLearnToken((x) => x + 1);
         const learn = await awaitGate(
           gates.learn,
           delay,
@@ -132,7 +134,7 @@ export function NetworkDemoPage() {
     })();
     return () => ac.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, runToken]);
+  }, [mode, runToken, status]);
 
   const ruleCards = useMemo(
     () => mergeRuleCards(liveResult?.cards, liveResult?.rules, []),
@@ -211,6 +213,7 @@ export function NetworkDemoPage() {
             <WorkflowLog
               key={useBuiltInLearning ? "built-in-network" : learningSource?.dataSourceId}
               sequence="learn-network"
+              autoStart={status === "running" && mode === "network" && learnToken > 0}
               title="规则学习 · 事件流"
               requestPayload={learnRequestPayload}
               onResult={(result) => {
@@ -521,8 +524,10 @@ function NetworkValidationStep({
 }) {
   const [runId, setRunId] = useState<number | null>(null);
   const [running, setRunning] = useState(false);
+  const startingRef = useRef(false);
   const startValidation = () => {
-    if (!uploaded) return;
+    if (!uploaded || startingRef.current || running) return;
+    startingRef.current = true;
     setRunId(Date.now());
     setRunning(true);
   };
@@ -559,8 +564,15 @@ function NetworkValidationStep({
           title="新资料核查 · 事件流"
           requestPayload={requestPayload}
           onResult={onResult}
-          onError={onError}
-          onDone={() => setRunning(false)}
+          onError={(err) => {
+            startingRef.current = false;
+            setRunning(false);
+            onError?.(err);
+          }}
+          onDone={() => {
+            startingRef.current = false;
+            setRunning(false);
+          }}
         />
       )}
       {!uploaded && (

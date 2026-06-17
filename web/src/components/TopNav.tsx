@@ -20,10 +20,14 @@ export function TopNav({
   route: Route;
   onNavigate: (r: Route) => void;
 }) {
-  const { startDemo } = useDemo();
+  const { startDemo, stopDemo } = useDemo();
+  const navigateManually = (next: Route) => {
+    stopDemo();
+    onNavigate(next);
+  };
   return (
     <header className="topnav">
-      <button className="topnav-brand" onClick={() => onNavigate("intro")}>
+      <button className="topnav-brand" onClick={() => navigateManually("intro")}>
         <img className="brand-logo" src={assetUrl("assets/netnomos-forge-logo.png")} alt="" aria-hidden="true" />
         <span className="brand-text">
           <strong>NetNomos Forge</strong>
@@ -35,7 +39,7 @@ export function TopNav({
           <button
             key={item.id}
             className={`topnav-item${route === item.id ? " is-active" : ""}`}
-            onClick={() => onNavigate(item.id)}
+            onClick={() => navigateManually(item.id)}
           >
             {item.label}
           </button>

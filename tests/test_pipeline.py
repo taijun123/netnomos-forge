@@ -205,6 +205,25 @@ class TestNetworkPipeline(unittest.TestCase):
         self.assertTrue(self.result["ruleset"].rules)
         self.assertTrue(self.result["cards"])
 
+    def test_learn_network_sequence_skips_dual_report(self):
+        import server.store as storemod
+
+        store = storemod.JobStore()
+        job = store.create_job("network_cidds", "learn-network")
+        events: list[WorkflowEvent] = []
+        with patch("forge.core.reporter.DualReporter.make_dual_network",
+                   side_effect=AssertionError("dual report should not run")):
+            result = run_network_pipeline(job, events.append)
+
+        self.assertIsNone(result["dual"])
+        self.assertIsNone(result["vreport"])
+        self.assertEqual(result["violations"], [])
+        stages = [event.stage for event in events]
+        self.assertIn("learn", stages)
+        self.assertIn("explain", stages)
+        self.assertNotIn("report", stages)
+        self.assertNotIn("diff", stages)
+
     def test_validate_network_uses_uploaded_data_source(self):
         import server.pipeline as pipeline
         import server.store as storemod
@@ -246,13 +265,91 @@ class TestNetworkPipeline(unittest.TestCase):
                 events: list[WorkflowEvent] = []
                 result = run_network_pipeline(job, events.append)
 
-                rows = result["dual"].track_a.slots["rows"]
-                self.assertEqual(len(rows), 2)
-                self.assertEqual(rows[0]["Flags"], ".AP.SF")
+                self.assertIsNone(result["dual"])
+                self.assertEqual(result["vreport"].total_rows, 2)
                 self.assertEqual({v.rule_id for v in result["violations"]}, {"N01"})
-                self.assertIn(uploaded_path.name, result["dual"].track_a.markdown)
                 descriptions = "\n".join(event.description for event in events)
                 self.assertIn(f"dataSourceId={data_source_id}", descriptions)
+                self.assertNotIn("stage=report", descriptions)
+                self.assertNotIn("diff", {event.stage for event in events})
+            finally:
+                pipeline.NETWORK_UPLOADS_DIR = old_uploads_dir
+                storemod._STORE = old_store           # noqa: SLF001
+
+    def test_report_network_sequence_runs_dual_once_with_uploaded_track_a(self):
+        import server.pipeline as pipeline
+        import server.store as storemod
+        from forge.contracts import TrackReport
+        from forge.core.reporter import DualReporter
+
+        class ExplodingLLM:
+            def complete(self, *args, **kwargs):
+                raise AssertionError("uploaded report-network must not call LLM for track A")
+
+        old_store = storemod._STORE                  # noqa: SLF001
+        old_uploads_dir = pipeline.NETWORK_UPLOADS_DIR
+        storemod._STORE = storemod.JobStore()        # noqa: SLF001
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            upload_root = Path(tmpdir) / "network_cidds"
+            upload_root.mkdir(parents=True)
+            pipeline.NETWORK_UPLOADS_DIR = upload_root
+            uploaded_path = upload_root / "report-netflow.csv"
+            uploaded_path.write_text(
+                "\n".join([
+                    "DateFirstSeen,Duration,Proto,SrcIpAddr,SrcPt,DstIpAddr,DstPt,Packets,Bytes,Flows,Flags,Tos",
+                    "2017-03-23 09:22:45.870,0.004,UDP,192.168.220.12,51413,DNS,53,2,196,1,.AP.SF,0",
+                    "2017-03-23 09:27:54.781,0.000,UDP,192.168.220.9,137,192.168.220.255,137,1,92,1,......,0",
+                ]),
+                encoding="utf-8",
+            )
+            try:
+                store = storemod.get_store()
+                data_source_id = store.put_data_source({
+                    "scenario": "network_cidds",
+                    "filename": uploaded_path.name,
+                    "path": str(uploaded_path),
+                    "size": uploaded_path.stat().st_size,
+                    "note": "report-upload",
+                })
+                job = store.create_job(
+                    "network_cidds",
+                    "report-network",
+                    request_params={
+                        "dataSourceId": data_source_id,
+                        "validationDataSourceId": data_source_id,
+                    },
+                )
+                fake_b = TrackReport(
+                    track="B",
+                    markdown="B track",
+                    slots={"rows": [
+                        {"Proto": "UDP", "SrcIpAddr": "a", "SrcPt": 1, "DstIpAddr": "DNS", "DstPt": 53,
+                         "Packets": 2, "Bytes": 196, "Flags": "......"},
+                        {"Proto": "UDP", "SrcIpAddr": "b", "SrcPt": 137, "DstIpAddr": "c", "DstPt": 137,
+                         "Packets": 1, "Bytes": 92, "Flags": "......"},
+                    ]},
+                    violations=[],
+                    intervention_log=["fake"],
+                )
+                calls: list[dict] = []
+                original_make_dual = DualReporter.make_dual_network
+
+                def spy_make_dual(self, *args, **kwargs):
+                    calls.append(dict(kwargs))
+                    return original_make_dual(self, *args, **kwargs)
+
+                events: list[WorkflowEvent] = []
+                with patch.object(DualReporter, "make_dual_network", spy_make_dual), \
+                        patch.object(DualReporter, "track_b_network", return_value=fake_b):
+                    result = run_network_pipeline(job, events.append, llm=ExplodingLLM())
+
+                self.assertEqual(len(calls), 1)
+                self.assertIsNotNone(calls[0].get("track_a_rows"))
+                self.assertEqual(result["dual"].track_a.slots["rows"][0]["Flags"], ".AP.SF")
+                self.assertEqual({v.rule_id for v in result["violations"]}, {"N01"})
+                descriptions = "\n".join(event.description for event in events)
+                self.assertIn("stage=report", descriptions)
             finally:
                 pipeline.NETWORK_UPLOADS_DIR = old_uploads_dir
                 storemod._STORE = old_store           # noqa: SLF001
@@ -366,6 +463,44 @@ class TestServerApp(unittest.TestCase):
                       API_RULESETS_LEARN, API_RULESETS_UPLOAD,
                       API_WORKFLOW_EVENTS, "/api/jobs/{job_id}"):
                 self.assertIn(p, paths)
+
+    def test_start_job_reuses_recent_running_duplicate(self):
+        import threading
+        import time
+
+        import server.app as appmod
+        import server.store as storemod
+        from forge.contracts import RuleSet
+
+        old_store = storemod._STORE                  # noqa: SLF001
+        old_pipeline = appmod._SCENARIO_PIPELINES["network_cidds"]  # noqa: SLF001
+        storemod._STORE = storemod.JobStore()        # noqa: SLF001
+        entered = threading.Event()
+        release = threading.Event()
+
+        def slow_pipeline(job, emit, llm=None):
+            entered.set()
+            release.wait(timeout=2)
+            return {"ruleset": RuleSet(scenario="network_cidds", rules=[]),
+                    "cards": [], "dual": None, "vreport": None}
+
+        appmod._SCENARIO_PIPELINES["network_cidds"] = slow_pipeline  # noqa: SLF001
+        try:
+            with patch("forge.utils.ollama_lifecycle.cleanup_ollama_after_job"):
+                first = appmod._start_job("network_cidds", "learn-network", {"x": "y"})
+                self.assertTrue(entered.wait(timeout=1))
+                second = appmod._start_job("network_cidds", "learn-network", {"x": "y"})
+                self.assertEqual(first, second)
+                release.set()
+                store = storemod.get_store()
+                deadline = time.time() + 2
+                while time.time() < deadline and store.get_job(first).status != JOB_DONE:
+                    time.sleep(0.02)
+                self.assertEqual(store.get_job(first).status, JOB_DONE)
+        finally:
+            release.set()
+            appmod._SCENARIO_PIPELINES["network_cidds"] = old_pipeline  # noqa: SLF001
+            storemod._STORE = old_store              # noqa: SLF001
 
     def test_data_sources_multipart_upload_persists_file(self):
         if find_spec("fastapi") is None:
@@ -622,6 +757,32 @@ class TestJobStore(unittest.TestCase):
         q = store.subscribe(job.job_id)
         self.assertEqual(q.get_nowait().stage, "learn")
         self.assertIsNone(q.get_nowait())
+
+    def test_find_recent_running_job_reuses_exact_request(self):
+        store = JobStore()
+        job = store.create_job(
+            "network_cidds",
+            "learn-network",
+            request_params={"dataSourceId": "abc"},
+        )
+        match = store.find_recent_running_job(
+            "network_cidds",
+            "learn-network",
+            {"dataSourceId": "abc"},
+        )
+        self.assertIsNotNone(match)
+        self.assertEqual(match.job_id, job.job_id)
+        self.assertIsNone(store.find_recent_running_job(
+            "network_cidds",
+            "learn-network",
+            {"dataSourceId": "other"},
+        ))
+        store.finish_job(job.job_id)
+        self.assertIsNone(store.find_recent_running_job(
+            "network_cidds",
+            "learn-network",
+            {"dataSourceId": "abc"},
+        ))
 
     def test_event_sse_format(self):
         ev = WorkflowEvent.make("report", "running", "B 轨槽位回填")

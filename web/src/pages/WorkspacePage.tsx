@@ -409,7 +409,7 @@ function finalizeLearningAgents(events: WorkflowEvent[], current: DemoAgent[], o
 
 
 export function WorkspacePage() {
-  const { mode, officeScenario, runToken, setStatus } = useDemo();
+  const { mode, officeScenario, runToken, status, setStatus } = useDemo();
   const [tasks, setTasks] = useState(DEFAULT_TASKS);
   const [selectedTaskId, setSelectedTaskId] = useState(DEFAULT_TASKS[0].id);
   const [rulePacks, setRulePacks] = useState(DEFAULT_PACKS);
@@ -443,10 +443,10 @@ export function WorkspacePage() {
   );
 
   useEffect(() => {
-    if (mode !== "workspace" || runToken === 0 || lastDemoTokenRef.current === runToken) return;
+    if (mode !== "workspace" || status !== "running" || runToken === 0 || lastDemoTokenRef.current === runToken) return;
     lastDemoTokenRef.current = runToken;
     void runWorkspaceDemo(officeScenario === "finance" ? "finance" : "network");
-  }, [mode, officeScenario, runToken]);
+  }, [mode, officeScenario, runToken, status]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ block: "end" });
@@ -1089,6 +1089,15 @@ function ChatMessage({ message, selectedPack }: { message: Message; selectedPack
       ) : (
         <article className="workspace-result-card">
           <p>{message.content}</p>
+          {message.result?.trackAMarkdown ? (
+            <section className="workspace-b-track">
+              <header>
+                <strong>A 轨 · 裸模型输出</strong>
+                {message.result.dualTitle && <span>{message.result.dualTitle}</span>}
+              </header>
+              <MarkdownBlock text={message.result.trackAMarkdown} />
+            </section>
+          ) : null}
           {message.result?.trackBMarkdown ? (
             <section className="workspace-b-track">
               <header>
