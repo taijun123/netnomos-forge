@@ -2,56 +2,49 @@
 
 <!-- 中文交接快照；保留标准小节名，便于 Codex / Claude / 其他模型接手。 -->
 
-- Updated: 2026-07-06 18:50 +0800
+- Updated: 2026-07-06 19:45 +0800
 - Repo: E:\yanchh\model_control\netnomos-forge
-- Branch: pages-static-demo
-- Last Commit: e1e948a Update required copyright notice
+- Branch: main
+- Last Commit: b359f09 fix(ui): 修复网络 demo diff HTML 双轨表格字符重叠
 
 ## Objective
 
-修复网络 demo B 轨表格 `SrcIpAddr` / `SrcPt` / `DstIpAddr` / `DstPt` 为空的问题（方案 A：派生字段回填展示字段 + 加强终检）。**已完成实现与验证。**
+修复网络 demo 界面 diff HTML 双轨表格字符重叠问题（8 列表格在双列网格中被压缩导致 IP/端口内容溢出重叠）。**已完成实现、验证、提交并推送。**
 
 ## Current Status
 
-当前工作区位于 `E:\yanchh\model_control\netnomos-forge`，分支 `pages-static-demo`，提交 `e1e948a`。
+当前工作区位于 `E:\yanchh\model_control\netnomos-forge`，分支 `main`，提交 `b359f09`，已推送到 `origin/main`。
 
-B 轨空字段问题已通过方案 A 修复：在 `forge/core/reporter.py` 新增 `_enrich_netflow_display_fields()` 后处理器，依据 `dataset_spec.json` preprocessing map_rules 的逆映射把 LeJIT 派生字段（`SrcSubnet`/`DstSubnet`/`SrcPortClass`/`DstPortClass`）回填为展示字段（`SrcIpAddr`/`SrcPt`/`DstIpAddr`/`DstPt`），保留派生字段用于审计；端口类 53 时强制对应 IP 为 "DNS" 以保证 N03 身份一致。同时在 `check_netflow_rows()` 增加 N04 检查，缺失必填展示字段即判违规。回填在 `collect_candidates()` 中、终检过滤前执行，确保终检 N04 正确验证已回填行。
+界面重叠问题已修复：`diff_html` 后端生成的 8 列 NetFlow 表格（`_NET_COLS`: Proto/SrcIpAddr/SrcPt/DstIpAddr/DstPt/Packets/Bytes/Flags）在 `minmax(0,1fr)` 双列网格中被压缩到容器一半宽度，`white-space:nowrap` 的内容溢出导致字符级重叠（如 "198TCP"、"203.0.113.4" 堆叠）。修复方式：后端 `_build_net_diff_html` 给每个 table 外包 `<div class="table-scroll">` 滚动容器；前端 CSS 给 `.diff-html .track-col` 加 `min-width:0` + `overflow:hidden` 防溢出，`.diff-html .data-table` 设 `min-width:560px` 保证最小列宽，`.diff-html .table-scroll` 设 `overflow-x:auto` 启用独立横向滚动。
 
-验证已通过：22/22 单测通过（含 7 个新增）；`quick_validate.py` 财务 PASS、网络 PASS（922 条规则）；B 轨探针确认 3 行展示字段均非空、0 违规。`forge/contracts.py` 未修改。
+验证已通过：22/22 单测通过（无回归）；diff_html 结构确认 2 个 table 均被 `table-scroll` 正确包裹。`forge/contracts.py` 未修改。
 
 ## Changed Files
 
 ```text
-M AI_WORKSITE_HANDOFF.md
-M forge/core/reporter.py
-M skills/worksite-handoff/SKILL.md
-M skills/worksite-handoff/references/schema.md
-M skills/worksite-handoff/scripts/update_handoff.py
-M tests/test_reporter.py
+ M skills/worksite-handoff/SKILL.md
+ M skills/worksite-handoff/references/schema.md
+ M skills/worksite-handoff/scripts/update_handoff.py
+?? .trae/
 ?? show/
 ```
 
-本次方案 A 修改的运行代码与测试：
+本次 UI 重叠修复涉及的已提交文件（均在 main 分支提交 `b359f09` 中）：
 
-- `forge/core/reporter.py`：新增 `_SUBNET_IP_PREFIX`/`_PORTCLASS_TO_PORT` 常量、`_subnet_to_ip()`、`_enrich_netflow_display_fields()`；`check_netflow_rows()` 增加 N04 缺失展示字段检查；`NET_RULE_TEXTS` 增加 N04 文案；`track_b_network()` 内 `collect_candidates()` 在终检前回填派生字段。
-- `tests/test_reporter.py`：新增 `TestNetFlowDisplayEnrichment` 共 7 个测试（回填、端口类映射、端口 53 身份一致性、不覆盖已有字段、N04 触发、N04 不误报、track_b_network 字段非空）。
+- `forge/core/reporter.py`：`_build_net_diff_html` 内 `table()` 函数给 `<table>` 外包 `<div class="table-scroll">` 滚动容器。
+- `web/src/styles.css`：`.diff-html .track-col` 加 `min-width:0` + `overflow:hidden`；`.diff-html .data-table` 设 `min-width:560px`；`.diff-html .table-scroll` 设 `overflow-x:auto`。
 
-注意：`skills/worksite-handoff/*` 和 `show/` 在本次中文交接前已经是 dirty / untracked 状态，不要为了整理交接而回滚它们。
+注意：`skills/worksite-handoff/*` 和 `show/`、`.trae/` 为用户既有的 dirty / untracked 状态，不要为了整理交接而回滚它们。
 
 ## Validation
 
 - `git rev-parse --show-toplevel` => `E:/yanchh/model_control/netnomos-forge`
-- `git rev-parse --abbrev-ref HEAD` => `pages-static-demo`
-- `git show-ref --heads pages-static-demo` => `e1e948a... refs/heads/pages-static-demo`
-- `Get-NetTCPConnection -LocalPort 8000,5173` => 后端 8000 监听，前端 5173 监听
-- `Invoke-RestMethod http://127.0.0.1:8000/api/health` => `{"status":"ok","jobs":24}`
-- `Invoke-WebRequest http://127.0.0.1:5173/` => HTTP 200
-- `uv run python -c "from forge.core.generator import ConstrainedGenerator; rows=ConstrainedGenerator.from_bundle('network_cidds').generate(2); print([list(r.keys()) for r in rows])"` => 仅返回 `Duration, Proto, SrcSubnet, DstSubnet, SrcPortClass, DstPortClass, Packets, Bytes, Flags, Tos`
-- `uv run python -c "from forge.core.reporter import check_netflow_rows; ..."` => 对缺失展示字段的 LeJIT 生成行仍返回 `[]`，说明当前终检没有把必填展示字段缺失当作违规
-- **方案 A 修复后验证（2026-07-06 18:50）**：
-  - `pytest tests/test_reporter.py -v` => 22 passed（含 7 个新增 `TestNetFlowDisplayEnrichment`）
-  - `python scripts/quick_validate.py` => 财务 PASS、网络 PASS（规则集 922 条、SSE 事件 16 个）
-  - B 轨探针 `DualReporter().track_b_network(3)` => 3 行，每行 `SrcIpAddr/SrcPt/DstIpAddr/DstPt` 均非空，`violations == []`
+- `git rev-parse --abbrev-ref HEAD` => `main`
+- `git log --oneline main -3` => `b359f09` → `75bdb9b` → `e1e948a`
+- `git push origin main` => `75bdb9b..b359f09 main -> main`（push 成功）
+- `pytest tests/test_reporter.py -q` => 22 passed（无回归）
+- diff_html 结构验证 => 2 个 `<table class="data-table">` 均被 `<div class="table-scroll">` 包裹，结构正确
+- 前次验证（B 轨修复，继承）：`quick_validate.py` 财务 PASS、网络 PASS（922 条规则）；B 轨探针 3 行展示字段均非空、0 违规
 
 ## Services
 
@@ -68,20 +61,21 @@ M tests/test_reporter.py
 - **已采纳方案 A 并实施**：在 B 轨返回前，把 `SrcSubnet/DstSubnet/SrcPortClass/DstPortClass` 映射回可展示的 `SrcIpAddr/DstIpAddr/SrcPt/DstPt`，保留派生字段用于审计。回填在 `collect_candidates()` 中、终检过滤前执行。
 - 端口-身份一致性：端口类 53 时对应 IP 强制为 "DNS"，保证 N03 不被回填破坏。
 - 端口类 70000/71000/72000 选代表端口 22/8080/50000，仅影响展示可读性，不触发 N03。
+- **分支合并决策**：用户明确 `pages-static-demo` 是之前忘了 merge 到 main 的界面分支，要求整体覆盖到 main。已用 force push 把 `origin/main` 覆盖为 `pages-static-demo` 内容（提交 `75bdb9b`），未做普通 merge（避免分叉历史）。
 - 不要修改 `forge/contracts.py`，旧交接中已将其列为冻结文件（本次未触碰）。
-- 不回滚用户既有的 dirty 文件（`skills/worksite-handoff/*`、`show/`）。
+- 不回滚用户既有的 dirty 文件（`skills/worksite-handoff/*`、`show/`、`.trae/`）。
 - 方案 B（重训 LeJIT）未采纳：需改 schema + GPU 重训，成本高且非演示阻塞项。
 
 ## Blockers
 
-- B 轨空字段问题已解决，无阻塞项。
-- 待办（非阻塞）：宿主机有 4 个陈旧测试断言失败（见 CLAUDE_HANDOFF.md 第 12 节），不影响本次 B 轨修复，但全量 `pytest tests/` 仍会红。
+- 无阻塞项。B 轨空字段问题已解决，分支已合并到 main 并推送。
 
 ## Next Steps
 
 - 前端验证（需后端 8000 + 前端 5173 运行）：打开 `http://127.0.0.1:5173/?v=w4source#/network`，运行网络 demo，确认 B 轨表格 `SrcIpAddr/SrcPt/DstIpAddr/DstPt` 列与 diff HTML 正常显示。
 - 可选：修复 4 个陈旧测试断言（`test_learn_validate_check` satisfaction 阈值、`test_explain_without_llm_uses_template` 机器解释路径、`test_z3_projection_matches_pure_python` COGS=3000、`test_track_b_zero_violations_with_fallback_note` 降级说明），使全量测试转绿。
 - 可选：如需更真实的 IP 多样性，可在 `_subnet_to_ip()` 中按行号进一步分散 host 八位。
+- 可选：`pages-static-demo` 分支本地仍存在（与 main 内容相同），如不再需要可删除以简化分支结构。
 
 ## Agent Notes
 
@@ -112,11 +106,14 @@ npm run dev -- --host 127.0.0.1 --port 5173
 
 ## Development History
 
+- 2026-07-06 19:45 +0800 - Claude/TRAE - 修复 diff HTML 双轨表格字符重叠：`forge/core/reporter.py` `_build_net_diff_html` table 外包 `table-scroll` 滚动容器；`web/src/styles.css` `.diff-html .track-col` 加 `min-width:0`+`overflow:hidden`，`.diff-html .data-table` 设 `min-width:560px`，`.diff-html .table-scroll` 设 `overflow-x:auto`。验证：22/22 单测、diff_html 结构确认。提交 `b359f09` 已 push。
+- 2026-07-06 19:25 +0800 - Claude/TRAE - 将 `pages-static-demo` 整体 force push 覆盖到 `origin/main`（`786c2d9...75bdb9b forced update`），本地 main 对齐；切换到 main 分支并刷新 `AI_WORKSITE_HANDOFF.md` 反映 main 状态。验证：main 与 origin/main 0/0 同步。
+- 2026-07-06 19:12 +0800 - Claude/TRAE - 在 pages-static-demo 提交 B 轨修复 `75bdb9b`（reporter.py + tests + handoff），cherry-pick 到 main 为 `786c2d9`（后被 force push 覆盖）。验证：22/22 单测、quick_validate PASS。
 - 2026-07-06 18:50 +0800 - Claude/TRAE - 实施方案 A 修复 B 轨空字段：`forge/core/reporter.py` 新增 `_enrich_netflow_display_fields()` 派生字段回填 + N04 终检，`collect_candidates()` 终检前回填；`tests/test_reporter.py` 新增 7 测试。验证：22/22 单测通过、quick_validate 财务+网络 PASS、B 轨探针 3 行字段非空 0 违规。
 - 2026-07-06 17:30 +0800 - Codex/GPT-5 - 将交接文件改为中文，补充当前分支、真实前端目录、启动命令、服务验证结果和 B 轨字段问题的两条修复路径；只修改 `AI_WORKSITE_HANDOFF.md`。
 - 2026-07-06 17:18 +0800 - Codex/GPT-5 - 确认网络 demo B 轨空字段根因，记录 LeJIT 派生字段 schema 与前端展示字段不一致；未改运行代码。
 
 ## Agent Roster
 
-- Claude/TRAE - Responsibility: 实施方案 A 修复 B 轨 NetFlow 空字段（派生字段回填 + N04 终检）并验证；Work-site: `forge/core/reporter.py`、`tests/test_reporter.py`、`AI_WORKSITE_HANDOFF.md`；Current state: done；Boundaries: 不修改 `forge/contracts.py`，不回滚用户既有 dirty files。
+- Claude/TRAE - Responsibility: 实施方案 A 修复 B 轨 NetFlow 空字段（派生字段回填 + N04 终检）、提交并 force push pages-static-demo 覆盖 main、刷新交接快照；Work-site: `forge/core/reporter.py`、`tests/test_reporter.py`、`AI_WORKSITE_HANDOFF.md`、git main/pages-static-demo 分支；Current state: done；Boundaries: 不修改 `forge/contracts.py`，不回滚用户既有 dirty files（`skills/worksite-handoff/*`、`show/`、`.trae/`）。
 - Codex/GPT-5 - Responsibility: 调查并交接 B 轨 NetFlow 字段 schema mismatch；Work-site: `AI_WORKSITE_HANDOFF.md`，只读检查 `forge/core/reporter.py`、`forge/core/generator.py`、`forge/scenarios/network_cidds/dataset_spec.json`、`forge/rulesets/network_cidds/lejit_bundle`、`web/src/pages/NetworkDemoPage.tsx`；Current state: done；Boundaries: 未实现运行时代码修复，不回滚用户已有 dirty files。
