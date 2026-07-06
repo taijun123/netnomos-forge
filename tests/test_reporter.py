@@ -7,6 +7,7 @@ import unittest
 from forge.core.llm import RoutedLLM
 from forge.core.reporter import (
     DualReporter,
+    _enrich_netflow_display_fields,
     check_netflow_rows,
     extract_number_tokens,
     final_check,
@@ -167,6 +168,86 @@ class TestNetworkDualReport(unittest.TestCase):
         self.assertEqual(dual.track_a.violations, [])
         self.assertEqual(len(dual.track_b.slots["rows"]), len(rows))
         self.assertIn("uploaded clean sample", dual.track_a.markdown)
+
+
+class TestNetFlowDisplayEnrichment(unittest.TestCase):
+    """方案 A：LeJIT 派生字段回填为可展示 IP/端口字段 + N04 终检."""
+
+    def test_enrich_fills_display_fields_from_derived(self):
+        """仅含派生字段的行回填后四个展示字段非空，派生字段保留."""
+        rows = [{
+            "Proto": "TCP", "SrcSubnet": 220, "DstSubnet": 100,
+            "SrcPortClass": 71000, "DstPortClass": 443,
+            "Packets": 2, "Bytes": 120, "Flags": ".AP.SF", "Tos": 0,
+        }]
+        out = _enrich_netflow_display_fields(rows)
+        for field in ("SrcIpAddr", "SrcPt", "DstIpAddr", "DstPt"):
+            self.assertTrue(str(out[0].get(field, "")).strip(),
+                            f"{field} 应被回填为非空")
+        # 派生字段保留用于审计
+        for field in ("SrcSubnet", "DstSubnet", "SrcPortClass", "DstPortClass"):
+            self.assertIn(field, out[0])
+
+    def test_enrich_portclass_maps_to_representative_port(self):
+        """端口类 53/80/443 直接相等；70000/71000/72000 映射为代表端口."""
+        rows = [
+            {"SrcPortClass": 53, "DstPortClass": 70000},
+            {"SrcPortClass": 71000, "DstPortClass": 72000},
+        ]
+        out = _enrich_netflow_display_fields(rows)
+        self.assertEqual(out[0]["SrcPt"], 53)
+        self.assertEqual(out[0]["DstPt"], 22)
+        self.assertEqual(out[1]["SrcPt"], 8080)
+        self.assertEqual(out[1]["DstPt"], 50000)
+
+    def test_enrich_port53_forces_dns_identity(self):
+        """端口类 53 时对应 IP 强制为 DNS，保证 N03 身份一致."""
+        rows = [{
+            "Proto": "UDP", "SrcSubnet": 220, "DstSubnet": 100,
+            "SrcPortClass": 72000, "DstPortClass": 53,
+            "Packets": 1, "Bytes": 64, "Flags": "......", "Tos": 0,
+        }]
+        out = _enrich_netflow_display_fields(rows)
+        self.assertEqual(out[0]["DstPt"], 53)
+        self.assertEqual(out[0]["DstIpAddr"], "DNS")
+        # 回填后应 0 违规（N03 不触发）
+        self.assertEqual(check_netflow_rows(out), [])
+
+    def test_enrich_does_not_overwrite_existing_display_fields(self):
+        """已有展示字段的行不被覆盖."""
+        rows = [{
+            "Proto": "TCP", "SrcIpAddr": "10.0.0.1", "SrcPt": 1234,
+            "DstIpAddr": "10.0.0.2", "DstPt": 80,
+            "SrcSubnet": 220, "DstSubnet": 100,
+            "SrcPortClass": 71000, "DstPortClass": 443,
+            "Packets": 1, "Bytes": 66, "Flags": ".A....", "Tos": 0,
+        }]
+        out = _enrich_netflow_display_fields(rows)
+        self.assertEqual(out[0]["SrcIpAddr"], "10.0.0.1")
+        self.assertEqual(out[0]["SrcPt"], 1234)
+
+    def test_check_n04_flags_missing_display_fields(self):
+        """缺失必填展示字段的行触发 N04 违规."""
+        bad = [{"Proto": "TCP", "Packets": 1, "Bytes": 66, "Flags": ".A...."}]
+        ids = [v.rule_id for v in check_netflow_rows(bad)]
+        self.assertIn("N04", ids)
+
+    def test_check_n04_not_fired_when_display_fields_present(self):
+        """含展示字段的合规行不触发 N04（mock 样本回归）."""
+        rows = mock_netflow_with_errors(10)
+        ids = {v.rule_id for v in check_netflow_rows(rows)}
+        self.assertNotIn("N04", ids)
+
+    def test_track_b_network_rows_have_display_fields(self):
+        """B 轨返回的 rows 每行包含非空 SrcIpAddr/SrcPt/DstIpAddr/DstPt."""
+        reporter = DualReporter(llm=RoutedLLM(force_backend="mock"))
+        report = reporter.track_b_network(3)
+        rows = report.slots["rows"]
+        self.assertGreater(len(rows), 0)
+        for row in rows:
+            for field in ("SrcIpAddr", "SrcPt", "DstIpAddr", "DstPt"):
+                self.assertTrue(str(row.get(field, "")).strip(),
+                                f"B 轨 row 缺少非空 {field}")
 
 
 if __name__ == "__main__":

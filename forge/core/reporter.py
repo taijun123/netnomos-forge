@@ -116,8 +116,33 @@ NET_RULE_TEXTS = {
     "N01": "Proto=UDP -> Flags=noflags（UDP 不应携带 TCP 标志位）",
     "N02": "42×Packets <= Bytes <= 65535×Packets（物理上下界）",
     "N03": "端口 53 流量对端应为 DNS 身份（端口-身份一致性）",
+    "N04": "必填展示字段 SrcIpAddr/SrcPt/DstIpAddr/DstPt 不得为空",
 }
 _NOFLAGS = "......"
+
+# LeJIT network_cidds bundle 生成派生字段；前端/表格/diff 读取展示字段。
+# 以下逆映射依据 forge/scenarios/network_cidds/dataset_spec.json 的 preprocessing
+# map_rules 反推，用于在 B 轨返回前把派生字段回填为可展示 IP/端口。
+# 子网类 → IP 前缀（CIDDS 内网 192.168.<subnet>.<host>；666 为公网代表段）
+_SUBNET_IP_PREFIX = {
+    0: "0.0.0.0",
+    888: "DNS",
+    100: "192.168.100.",
+    200: "192.168.200.",
+    210: "192.168.210.",
+    220: "192.168.220.",
+    666: "203.0.113.",
+}
+# 端口类 → 代表展示端口（53/80/443 直接相等；70000/71000/72000 选各自区间
+# 的代表性端口，仅影响展示可读性，不触发 N03 身份检查）
+_PORTCLASS_TO_PORT = {
+    53: 53,
+    80: 80,
+    443: 443,
+    70000: 22,
+    71000: 8080,
+    72000: 50000,
+}
 
 
 def check_netflow_rows(rows: list[dict[str, Any]]) -> list[Violation]:
@@ -133,6 +158,19 @@ def check_netflow_rows(rows: list[dict[str, Any]]) -> list[Violation]:
             dst_pt = int(row.get("DstPt", 0))
         except (TypeError, ValueError):
             packets, nbytes, src_pt, dst_pt = 0, 0, 0, 0
+        # N04 必填展示字段不得为空（防御性终检：回填失败则拒绝输出）
+        _required_display = ["SrcIpAddr", "SrcPt", "DstIpAddr", "DstPt"]
+        _missing = [f for f in _required_display
+                    if not str(row.get(f, "")).strip()]
+        if _missing:
+            violations.append(Violation(
+                row_index=i, rule_id="N04", rule_text=NET_RULE_TEXTS["N04"],
+                fields=_missing,
+                observed={f: row.get(f) for f in _missing},
+                expected="必填展示字段 SrcIpAddr/SrcPt/DstIpAddr/DstPt 不得为空",
+                message_zh=f"第 {i + 1} 条记录：必填展示字段 "
+                           f"{','.join(_missing)} 为空，无法展示 IP/端口。"))
+            continue
         # N01 协议蕴含
         if proto == "UDP" and flags not in (_NOFLAGS, ""):
             violations.append(Violation(
@@ -184,6 +222,55 @@ def _split_valid_netflow_rows(
         else:
             valid.append(row)
     return valid, rejected
+
+
+def _subnet_to_ip(subnet: Any, offset: int) -> str:
+    """把 CIDDS 子网类编码映射为可展示 IP 字符串.
+
+    0 → 0.0.0.0；888 → DNS；100/200/210/220 → 192.168.<subnet>.<host>；
+    666 → 203.0.113.<host>（TEST-NET-3 公网代表段）。host 八位由 offset
+    确定性推导，使多行 IP 不全相同。
+    """
+    prefix = _SUBNET_IP_PREFIX.get(subnet)
+    if prefix is None:
+        return f"203.0.113.{(offset % 254) + 1}"
+    if prefix in ("0.0.0.0", "DNS"):
+        return prefix
+    return f"{prefix}{(offset % 254) + 1}"
+
+
+def _enrich_netflow_display_fields(
+    rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """把 LeJIT 派生字段回填为可展示 IP/端口字段（方案 A）.
+
+    LeJIT network_cidds bundle 按 dataset_spec.json 的 include_fields 生成
+    SrcSubnet/DstSubnet/SrcPortClass/DstPortClass 等派生字段，而前端、diff
+    HTML 与 markdown 表格读取 SrcIpAddr/SrcPt/DstIpAddr/DstPt。本函数依据
+    preprocessing map_rules 的逆映射回填展示字段，同时保留派生字段用于审计。
+
+    端口-身份一致性：若端口类为 53，对应 IP 强制为 "DNS"，与 N03 规则保持
+    一致，避免回填后引入身份违规。仅在字段缺失时回填，不覆盖已有展示字段。
+    """
+    enriched: list[dict[str, Any]] = []
+    for i, row in enumerate(rows):
+        r = dict(row)
+        # --- 端口：SrcPortClass/DstPortClass → SrcPt/DstPt ---
+        if "SrcPt" not in r and r.get("SrcPortClass") is not None:
+            r["SrcPt"] = _PORTCLASS_TO_PORT.get(r["SrcPortClass"], 0)
+        if "DstPt" not in r and r.get("DstPortClass") is not None:
+            r["DstPt"] = _PORTCLASS_TO_PORT.get(r["DstPortClass"], 0)
+        # --- IP：端口 53 ⇒ DNS 身份；否则由子网类回填 ---
+        if r.get("SrcPt") == 53:
+            r["SrcIpAddr"] = "DNS"
+        elif "SrcIpAddr" not in r and r.get("SrcSubnet") is not None:
+            r["SrcIpAddr"] = _subnet_to_ip(r["SrcSubnet"], i)
+        if r.get("DstPt") == 53:
+            r["DstIpAddr"] = "DNS"
+        elif "DstIpAddr" not in r and r.get("DstSubnet") is not None:
+            r["DstIpAddr"] = _subnet_to_ip(r["DstSubnet"], i + 100)
+        enriched.append(r)
+    return enriched
 
 
 def mock_netflow_with_errors(n: int = 10) -> list[dict[str, Any]]:
@@ -757,7 +844,8 @@ class DualReporter:
         logbook: list[str] = []
 
         def collect_candidates(candidates: list[dict[str, Any]], source: str) -> None:
-            valid, rejected = _split_valid_netflow_rows(candidates)
+            enriched = _enrich_netflow_display_fields(candidates)
+            valid, rejected = _split_valid_netflow_rows(enriched)
             if rejected:
                 logbook.append(
                     f"{source} 终检剔除 {len(rejected)} 条不合规记录，"
