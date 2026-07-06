@@ -2,22 +2,24 @@
 
 <!-- 中文交接快照；保留标准小节名，便于 Codex / Claude / 其他模型接手。 -->
 
-- Updated: 2026-07-06 19:45 +0800
+- Updated: 2026-07-06 23:00 +0800
 - Repo: E:\yanchh\model_control\netnomos-forge
 - Branch: main
-- Last Commit: b359f09 fix(ui): 修复网络 demo diff HTML 双轨表格字符重叠
+- Last Commit: 9cf41c7 feat(static-demo): 用真实后端数据替换 GitHub Pages 静态演示仿真数据
 
 ## Objective
 
-修复网络 demo 界面 diff HTML 双轨表格字符重叠问题（8 列表格在双列网格中被压缩导致 IP/端口内容溢出重叠）。**已完成实现、验证、提交并推送。**
+用本地后端真实运行数据替换 GitHub Pages 静态演示页的仿真数据，使 github.io 点击一键演示时显示真实结果。**已完成。**
 
 ## Current Status
 
-当前工作区位于 `E:\yanchh\model_control\netnomos-forge`，分支 `main`，提交 `b359f09`，已推送到 `origin/main`。
+当前工作区位于 `E:\yanchh\model_control\netnomos-forge`，分支 `main`，提交 `9cf41c7`，已推送到 `origin/main`。
 
-界面重叠问题已修复：`diff_html` 后端生成的 8 列 NetFlow 表格（`_NET_COLS`: Proto/SrcIpAddr/SrcPt/DstIpAddr/DstPt/Packets/Bytes/Flags）在 `minmax(0,1fr)` 双列网格中被压缩到容器一半宽度，`white-space:nowrap` 的内容溢出导致字符级重叠（如 "198TCP"、"203.0.113.4" 堆叠）。修复方式：后端 `_build_net_diff_html` 给每个 table 外包 `<div class="table-scroll">` 滚动容器；前端 CSS 给 `.diff-html .track-col` 加 `min-width:0` + `overflow:hidden` 防溢出，`.diff-html .data-table` 设 `min-width:560px` 保证最小列宽，`.diff-html .table-scroll` 设 `overflow-x:auto` 启用独立横向滚动。
+静态演示数据已用真实后端运行结果替换：通过 HTTP 触发后端 learn/validate/report 序列，捕获 `job.result`（rules/cards/violations/dual），转换为 TypeScript 替换 `web/src/demo/demoMocks.ts`。捕获数据：network_cidds（922 rules, 12 cards, 4 violations, A 轨 4 违规/B 轨 0 违规/diff_html 真实标红）、finance_v1（7 rules, 7 cards, 5 violations, A 轨 5 违规/B 轨 0 违规/完整财务分析 slots）。
 
-验证已通过：22/22 单测通过（无回归）；diff_html 结构确认 2 个 table 均被 `table-scroll` 正确包裹。`forge/contracts.py` 未修改。
+强约束遵守：仅修改 `web/src/demo/demoMocks.ts`（静态展示数据源），未修改 `forge/` 后端代码（`contracts.py` 冻结）、`demoDriver.ts`/`events.ts` 真实运行路径、`static-demo/workflow.ts` 静态编排逻辑。
+
+验证：`tsc -b` 通过（无类型错误），`vite build --base=/netnomos-forge/` 成功（10.51s），产物 3.1MB（gzip 398KB）。
 
 ## Changed Files
 
@@ -106,6 +108,7 @@ npm run dev -- --host 127.0.0.1 --port 5173
 
 ## Development History
 
+- 2026-07-06 23:00 +0800 - Claude/TRAE - 用真实后端数据替换 GitHub Pages 静态演示仿真数据：通过 HTTP 触发后端 learn/validate/report 序列捕获 job.result，转换替换 `web/src/demo/demoMocks.ts`（network 922 rules/12 cards/4 violations + finance 7 rules/7 cards/5 violations）。仅改静态数据源，不动后端/真实路径/静态编排。验证：tsc+build 通过。提交 `9cf41c7` 已 push。
 - 2026-07-06 19:45 +0800 - Claude/TRAE - 修复 diff HTML 双轨表格字符重叠：`forge/core/reporter.py` `_build_net_diff_html` table 外包 `table-scroll` 滚动容器；`web/src/styles.css` `.diff-html .track-col` 加 `min-width:0`+`overflow:hidden`，`.diff-html .data-table` 设 `min-width:560px`，`.diff-html .table-scroll` 设 `overflow-x:auto`。验证：22/22 单测、diff_html 结构确认。提交 `b359f09` 已 push。
 - 2026-07-06 19:25 +0800 - Claude/TRAE - 将 `pages-static-demo` 整体 force push 覆盖到 `origin/main`（`786c2d9...75bdb9b forced update`），本地 main 对齐；切换到 main 分支并刷新 `AI_WORKSITE_HANDOFF.md` 反映 main 状态。验证：main 与 origin/main 0/0 同步。
 - 2026-07-06 19:12 +0800 - Claude/TRAE - 在 pages-static-demo 提交 B 轨修复 `75bdb9b`（reporter.py + tests + handoff），cherry-pick 到 main 为 `786c2d9`（后被 force push 覆盖）。验证：22/22 单测、quick_validate PASS。
