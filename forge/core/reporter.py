@@ -969,8 +969,9 @@ class DualReporter:
                     f"<td>{cell(i, c, r.get(c, ''), track)}</td>"
                     for c in _NET_COLS) + "</tr>"
                 for i, r in enumerate(rows))
-            return (f'<table class="data-table"><thead><tr>{head}</tr></thead>'
-                    f'<tbody>{body}</tbody></table>')
+            return (f'<div class="table-scroll">'
+                    f'<table class="data-table"><thead><tr>{head}</tr></thead>'
+                    f'<tbody>{body}</tbody></table></div>')
 
         return (
             '<div class="dual-track dual-report">'

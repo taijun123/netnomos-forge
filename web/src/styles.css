@@ -2612,6 +2612,17 @@ code,
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: rgba(120, 150, 220, 0.05);
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* diff-html 内的表格保证最小列宽，避免 8 列被压缩到字符重叠 */
+.diff-html .data-table {
+  min-width: 560px;
+}
+
+.diff-html .table-scroll {
+  overflow-x: auto;
 }
 
 .report-stamp {
